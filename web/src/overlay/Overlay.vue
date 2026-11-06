@@ -133,15 +133,55 @@ function startWheel(items, ms) {
   }, wheelDur.value + 150)
 }
 
+// 名字抽奖：从观众名单里抽 1~10 个
+const namePool = ref([])
+const nameWins = ref([])
+const nameRoll = ref('')
+const nameDone = ref(false)
+let nameTimer = null
+
+function startNames(d) {
+  if (nameTimer) {
+    clearInterval(nameTimer)
+    nameTimer = null
+  }
+  namePool.value = d.items && d.items.length ? d.items : []
+  nameWins.value = d.wins || []
+  nameDone.value = false
+  nameRoll.value = ''
+  const ms = Number(d.spinMs) || 2400
+  if (!namePool.value.length) {
+    nameRoll.value = '名单空的'
+    return
+  }
+  const t0 = Date.now()
+  nameTimer = setInterval(() => {
+    nameRoll.value = namePool.value[Math.floor(Math.random() * namePool.value.length)]
+    if (Date.now() - t0 >= ms) {
+      clearInterval(nameTimer)
+      nameTimer = null
+      nameRoll.value = ''
+      nameDone.value = true
+    }
+  }, 70)
+}
+
 function onGame(d) {
   if (!d || d.type === 'clear' || d.type === '') {
     game.value = null
+    if (nameTimer) {
+      clearInterval(nameTimer)
+      nameTimer = null
+    }
     return
   }
   if (d.type === 'wheel' && (!d.items || !d.items.length)) return
   game.value = d
   if (d.type === 'wheel') {
     startWheel(d.items, d.spinMs)
+  }
+  if (d.type === 'names') {
+    startNames(d)
   }
   if (d.type === 'guess') {
     guessSeq.value++
@@ -600,18 +640,46 @@ function enableAudio() {
       <div v-if="wheelWinner" class="wheel-win">🎉 {{ wheelWinner }}</div>
     </div>
 
+    <!-- 名字抽奖 -->
+    <div v-if="game && game.type === 'names'" class="names-wrap" :key="'names-' + game.started">
+      <div class="names-title">名字抽奖</div>
+      <div v-if="!nameDone" class="names-roll-box">
+        <div class="names-roll">{{ nameRoll || '准备…' }}</div>
+        <div class="names-sub">从 {{ game.pool || namePool.length }} 位观众里抽 {{ game.count || nameWins.length }} 个</div>
+      </div>
+      <div v-else class="names-wins">
+        <div
+          v-for="(w, i) in nameWins"
+          :key="i"
+          class="name-card"
+          :style="{ animationDelay: i * 0.14 + 's' }"
+        >
+          <span class="name-no">{{ i + 1 }}</span>
+          <span class="name-text">{{ w }}</span>
+        </div>
+      </div>
+    </div>
+
     <!-- 猜数字 -->
     <div v-if="game && game.type === 'guess'" class="guess-wrap" :key="guessSeq">
       <div class="guess-title">弹幕猜数字</div>
       <div v-if="game.won" class="guess-win">
         <div class="gw-name">{{ game.user }}</div>
-        <div class="gw-text">猜中了！</div>
+        <div class="gw-text">猜中了！数字就是 {{ game.guess }}</div>
       </div>
-      <div v-else class="guess-range" :key="game.lo + '-' + game.hi">
-        <span>{{ game.lo }}</span>
-        <i>~</i>
-        <span>{{ game.hi }}</span>
-      </div>
+      <template v-else>
+        <div class="guess-range" :key="game.lo + '-' + game.hi">
+          <span>{{ game.lo }}</span>
+          <i>~</i>
+          <span>{{ game.hi }}</span>
+        </div>
+        <div class="guess-hint">范围 {{ game.min }} ~ {{ game.max }}（已经缩到这里）</div>
+        <div v-if="game.guess" class="guess-fb" :class="game.dir" :key="'fb-' + game.started">
+          <span class="fb-user">{{ game.user }}</span>
+          <span class="fb-num">猜了 {{ game.guess }}</span>
+          <span class="fb-word">{{ game.dir === 'high' ? '猜大了' : game.dir === 'low' ? '猜小了' : '猜中' }}</span>
+        </div>
+      </template>
     </div>
 
     <!-- 抓叛徒 -->
@@ -866,6 +934,93 @@ function enableAudio() {
   fill: #ffffff;
   font-weight: 900;
 }
+/* ---------- 名字抽奖 ---------- */
+.names-wrap {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 860px;
+  max-width: 92vw;
+  pointer-events: none;
+}
+.names-title {
+  font-size: 40px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  color: #ffffff;
+  text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000;
+  margin-bottom: 26px;
+}
+.names-roll-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 34px 60px 26px;
+  border-radius: 24px;
+  background: radial-gradient(circle at 50% 30%, rgba(24, 60, 96, 0.92), rgba(5, 9, 16, 0.95));
+  border: 2px solid #4ac7ff;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.7);
+}
+.names-roll {
+  font-size: 62px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: #ffffff;
+  text-shadow: -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000, 3px 3px 0 #000, 0 5px 14px rgba(0, 0, 0, 0.9);
+  min-width: 360px;
+  text-align: center;
+  transition: transform 0.08s ease;
+}
+.names-sub {
+  margin-top: 14px;
+  font-size: 17px;
+  color: #9fd9f5;
+  letter-spacing: 1px;
+}
+.names-wins {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+  max-width: 860px;
+}
+.name-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 28px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(18, 46, 78, 0.95), rgba(8, 14, 24, 0.95));
+  border: 2px solid #7de9ff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.65);
+  animation: namePop 0.5s cubic-bezier(0.2, 1.5, 0.4, 1) both;
+}
+.name-no {
+  width: 34px;
+  height: 34px;
+  line-height: 34px;
+  text-align: center;
+  border-radius: 50%;
+  background: #7de9ff;
+  color: #05121e;
+  font-weight: 900;
+  font-size: 18px;
+}
+.name-text {
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: #ffffff;
+  text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000;
+}
+@keyframes namePop {
+  from { transform: scale(0.6) translateY(16px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
 .wheel-win {
   margin-top: 14px;
   padding: 10px 30px;
@@ -919,7 +1074,7 @@ function enableAudio() {
   font-size: 88px;
   font-weight: 900;
   color: #fff;
-  text-shadow: 0 0 24px rgba(255, 107, 138, 0.9), 0 6px 24px rgba(0, 0, 0, 0.8);
+  text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0 6px 18px rgba(0, 0, 0, 0.85);
   animation: guesspulse 0.6s ease both;
 }
 .guess-range i { font-style: normal; font-size: 46px; color: #ffd24a; }
@@ -930,6 +1085,43 @@ function enableAudio() {
 .guess-win { font-size: 40px; font-weight: 900; color: #fff; }
 .gw-name { color: #ffd24a; font-size: 48px; }
 .gw-text { margin-top: 6px; }
+
+.guess-hint {
+  margin-top: 10px;
+  font-size: 18px;
+  color: #cfeeff;
+  letter-spacing: 1px;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+}
+.guess-fb {
+  margin-top: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 28px;
+  border-radius: 999px;
+  background: rgba(5, 9, 16, 0.85);
+  border: 2px solid #7de9ff;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7);
+  animation: fbIn 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.guess-fb.high { border-color: #ff6b8a; }
+.guess-fb.low { border-color: #5fd8ff; }
+.fb-user { font-size: 20px; color: #cfd8e6; }
+.fb-num { font-size: 24px; color: #ffffff; font-weight: 800; }
+.fb-word {
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #ffffff;
+  text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0 3px 10px rgba(0, 0, 0, 0.9);
+}
+.guess-fb.high .fb-word { color: #ffffff; }
+.guess-fb.low .fb-word { color: #ffffff; }
+@keyframes fbIn {
+  from { transform: scale(0.7) translateY(12px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
 
 .traitor-wrap {
   position: absolute;

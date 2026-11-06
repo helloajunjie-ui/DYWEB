@@ -121,16 +121,85 @@ const spin = () => {
     speed: speed.value
   })
 }
-const guess = () => trigger('猜数字', '/api/game/guess')
+const guess = () => {
+  saveGuess()
+  return trigger('猜数字', '/api/game/guess', { lo: Number(gLo.value) || 1, hi: Number(gHi.value) || 1000 })
+}
 const traitor = () => trigger('抓叛徒', '/api/game/traitor')
 const clear = () => trigger('清屏', '/api/game/clear')
+
+// 猜数字范围，主播自己定
+const gLo = ref(1)
+const gHi = ref(1000)
+const guessPresets = [
+  { label: '1~100', lo: 1, hi: 100 },
+  { label: '1~500', lo: 1, hi: 500 },
+  { label: '1~1000', lo: 1, hi: 1000 }
+]
+function saveGuess() {
+  try {
+    localStorage.setItem('dyw_guess_lo', String(gLo.value))
+    localStorage.setItem('dyw_guess_hi', String(gHi.value))
+  } catch {
+    /* ignore */
+  }
+}
+function loadGuess() {
+  try {
+    const lo = Number(localStorage.getItem('dyw_guess_lo'))
+    const hi = Number(localStorage.getItem('dyw_guess_hi'))
+    if (lo) gLo.value = lo
+    if (hi) gHi.value = hi
+  } catch {
+    /* ignore */
+  }
+}
+loadGuess()
+
+// 名字抽奖：默认从观众名单里抽，也能自己贴名单
+const nameCount = ref(1)
+const namesText = ref('')
+const audienceCount = ref(0)
+const audiences = [
+  { n: 1, label: '抽 1 个' },
+  { n: 3, label: '抽 3 个' },
+  { n: 5, label: '抽 5 个' },
+  { n: 10, label: '抽 10 个' }
+]
+
+async function loadAudience() {
+  try {
+    const d = await get('/api/game/audience')
+    audienceCount.value = d.count || 0
+  } catch {
+    /* ignore */
+  }
+}
+loadAudience()
+
+const manualNames = computed(() =>
+  namesText.value
+    .split(/[\n,，、]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+)
+const drawNames = () =>
+  trigger('名字抽奖', '/api/game/names', {
+    count: nameCount.value,
+    names: manualNames.value
+  })
 
 const statusText = computed(() => {
   const g = game.value
   if (!g) return '现在大屏上没有游戏'
   if (g.type === 'wheel') return '转盘：' + g.title
-  if (g.type === 'guess') return g.won ? '已开奖：' + g.user : `猜数字进行中 ${g.lo}~${g.hi}`
+  if (g.type === 'guess') {
+    if (g.won) return '已开奖：' + g.user
+    const fb = g.guess ? ` ｜ ${g.user} 猜 ${g.guess}：${g.dir === 'high' ? '猜大了' : '猜小了'}` : ''
+    return `猜数字 ${g.lo}~${g.hi}${fb}`
+  }
   if (g.type === 'traitor') return '通缉：' + (g.user || '没人可抓')
+  if (g.type === 'names') return g.wins && g.wins.length ? '中奖：' + g.wins.join('、') : '名字抽奖：' + (g.tip || '')
   return ''
 })
 </script>
@@ -158,7 +227,12 @@ const statusText = computed(() => {
       <button class="big blue" :disabled="!!busy" @click="guess">
         <span class="ico">🔢</span>
         <span class="lab">一键猜数字</span>
-        <span class="sub">1~1000，弹幕猜，AI 毒舌</span>
+        <span class="sub">{{ gLo }}~{{ gHi }}，猜大了小了会回显</span>
+      </button>
+      <button class="big violet" :disabled="!!busy" @click="drawNames">
+        <span class="ico">🎟️</span>
+        <span class="lab">名字抽奖</span>
+        <span class="sub">{{ manualNames.length ? `用你贴的 ${manualNames.length} 人` : `从观众名单抽，现 ${audienceCount} 人` }}</span>
       </button>
       <button class="big red" :disabled="!!busy" @click="traitor">
         <span class="ico">🚨</span>
@@ -202,6 +276,43 @@ const statusText = computed(() => {
       <div class="chips">
         <button v-for="t in themes" :key="t" class="chip" @click="theme = t">{{ t }}</button>
       </div>
+    </div>
+
+    <div class="theme">
+      <label>猜数字 · 范围（主播自己定，越小越快猜中）</label>
+      <div class="row two">
+        <input v-model.number="gLo" type="number" min="0" placeholder="最小" @change="saveGuess" />
+        <span class="dash">~</span>
+        <input v-model.number="gHi" type="number" min="1" placeholder="最大" @change="saveGuess" />
+      </div>
+      <div class="chips">
+        <button
+          v-for="p in guessPresets"
+          :key="p.label"
+          class="chip"
+          :class="{ on: gLo === p.lo && gHi === p.hi }"
+          @click="gLo = p.lo; gHi = p.hi; saveGuess()"
+        >{{ p.label }}</button>
+      </div>
+    </div>
+
+    <div class="theme">
+      <label>名字抽奖 · 抽几个（从观众名单里抽，不重复）</label>
+      <div class="chips">
+        <button
+          v-for="a in audiences"
+          :key="a.n"
+          class="chip"
+          :class="{ on: nameCount === a.n }"
+          @click="nameCount = a.n"
+        >{{ a.label }}</button>
+      </div>
+      <div class="row">
+        <button class="mini ghost" @click="loadAudience">刷新名单人数</button>
+        <span class="count">观众名单 {{ audienceCount }} 人</span>
+      </div>
+      <label class="mt">不想用观众名单？贴自己的（一行一个，留空就用观众名单）</label>
+      <textarea v-model="namesText" rows="3" placeholder="比如：&#10;张三&#10;李四"></textarea>
     </div>
 
     <footer>
@@ -263,6 +374,7 @@ h1 { font-size: 22px; margin: 0; letter-spacing: 1px; }
 .amber { background: linear-gradient(160deg, #ffd24a, #f0a93b); }
 .blue { background: linear-gradient(160deg, #7ed0ff, #4a9bf0); }
 .red { background: linear-gradient(160deg, #ff7a86, #e8394d); color: #fff; }
+.violet { background: linear-gradient(160deg, #b18cff, #6a4bff); color: #fff; }
 .ghost { background: rgba(255, 255, 255, 0.06); border-color: #2b3242; color: #dfe4ee; }
 
 .theme { margin-top: 18px; }
@@ -283,6 +395,8 @@ h1 { font-size: 22px; margin: 0; letter-spacing: 1px; }
 }
 .theme label.mt { margin-top: 16px; }
 .row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.row.two input { flex: 1; }
+.row.two .dash { color: #8b93a7; }
 .mini {
   background: rgba(255, 210, 74, 0.14);
   border: 1px solid #6b5717;

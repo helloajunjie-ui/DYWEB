@@ -79,7 +79,15 @@ func (a *App) registerAPI(mux *http.ServeMux) {
 	})
 
 	mux.HandleFunc("/api/game/guess", func(w http.ResponseWriter, r *http.Request) {
-		v := a.StartGuess()
+		var body struct {
+			Lo int `json:"lo"`
+			Hi int `json:"hi"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body.Lo == 0 && body.Hi == 0 {
+			body.Lo, body.Hi = 1, 1000
+		}
+		v := a.StartGuess(body.Lo, body.Hi)
 		writeJSON(w, 200, map[string]any{"ok": true, "game": v})
 	})
 
@@ -100,6 +108,23 @@ func (a *App) registerAPI(mux *http.ServeMux) {
 	mux.HandleFunc("/api/game/clear", func(w http.ResponseWriter, r *http.Request) {
 		a.ClearGame()
 		writeJSON(w, 200, map[string]any{"ok": true})
+	})
+
+	// 名字抽奖：默认从观众名单抽，也可以贴自己的名单
+	mux.HandleFunc("/api/game/names", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Count int      `json:"count"`
+			Names []string `json:"names"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		v := a.DrawNames(body.Count, body.Names)
+		writeJSON(w, 200, map[string]any{"ok": true, "game": v})
+	})
+
+	// 面板上先看一眼名单里有几个人、都是谁
+	mux.HandleFunc("/api/game/audience", func(w http.ResponseWriter, r *http.Request) {
+		names := a.AudienceNames()
+		writeJSON(w, 200, map[string]any{"ok": true, "count": len(names), "names": names})
 	})
 
 	// 切换直播定位：只改一个字段，不动其它配置
