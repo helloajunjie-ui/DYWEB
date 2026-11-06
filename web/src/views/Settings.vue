@@ -183,7 +183,7 @@ function setTtsMode(m) {
     <div class="row" style="align-items: center">
       <div style="flex: 1">
         <h3 style="margin: 0">语音播报</h3>
-        <p class="small muted" style="margin: 4px 0 0">关掉就一句都不念；开着重播词也只在中奖/大礼物时念。</p>
+        <p class="small muted" style="margin: 4px 0 0">AI 负责写词，这里负责嗓子，两者不冲突；关掉后 AI 只出字不出声。</p>
       </div>
       <label class="switch big"><input type="checkbox" v-model="cfg.tts.enabled" /><i></i></label>
     </div>

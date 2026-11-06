@@ -19,20 +19,21 @@ type Module struct {
 	Params   map[string]any `json:"params"`
 }
 
-// Category 分类
+// Category 分类：小白按"直播哪个环节"理解，而不是按技术模块名
 type Category struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+	Desc string `json:"desc"`
 }
 
 var categoryList = []Category{
-	{ID: "ingest", Name: "接入"},
-	{ID: "talk", Name: "话术 · AI"},
-	{ID: "visual", Name: "画面特效"},
-	{ID: "game", Name: "互动玩法"},
-	{ID: "audio", Name: "声音"},
-	{ID: "hardware", Name: "硬件联动"},
-	{ID: "ops", Name: "运维 · 自愈"},
+	{ID: "ingest", Name: "① 接数据", Desc: "别家工具把弹幕、礼物、进场推给这里"},
+	{ID: "talk", Name: "② 说话：AI 与语音", Desc: "AI 写台词、把话念出来、记住老粉"},
+	{ID: "visual", Name: "③ 画面：礼物特效", Desc: "观众送礼时大屏放什么"},
+	{ID: "game", Name: "④ 玩法：抽奖和整活", Desc: "转盘、猜数字、抓叛徒这类互动"},
+	{ID: "audio", Name: "⑤ 声音：音效与提示", Desc: "叮、boom、倒计时这些声音"},
+	{ID: "hardware", Name: "⑥ 外设：灯光和按键", Desc: "接灯、接键盘热键（要硬件才用得上）"},
+	{ID: "ops", Name: "⑦ 后台：自动修复", Desc: "掉线、卡顿自己恢复，平时不用管"},
 }
 
 // ModuleStore 模块注册表
@@ -173,9 +174,9 @@ func defaultModules() []Module {
 		{ID: "ws_ingest", Name: "WebSocket 推送接入", Category: "ingest", Desc: "长连接推送到 /ws/ingest", Ready: true, Enabled: true},
 		{ID: "field_mapping", Name: "字段映射", Category: "ingest", Desc: "把工具的字段映射成统一事件", Ready: true, Enabled: true, Testable: true},
 
-		{ID: "tts_local", Name: "本机 TTS 播报", Category: "talk", Desc: "Windows SAPI，离线可用", Ready: true, Enabled: true, Testable: true,
+		{ID: "tts_local", Name: "本机语音播报", Category: "talk", Desc: "负责把字念出来（嗓子），和 AI 不冲突", Ready: true, Enabled: true, Testable: true,
 			Params: map[string]any{"rate": 0, "volume": 90, "mode": "local"}},
-		{ID: "tts_browser", Name: "页面朗读", Category: "talk", Desc: "由 overlay 页朗读，音色跟随浏览器", Ready: true, Enabled: false},
+		{ID: "tts_browser", Name: "网页语音朗读", Category: "talk", Desc: "换一种嗓音念，和本机播报二选一，别同时开", Ready: true, Enabled: false},
 		{ID: "llm_chat", Name: "AI 话术生成", Category: "talk", Desc: "OpenAI 兼容接口，生成后自动播报", Ready: true, Enabled: false, Testable: true},
 		{ID: "fan_memory", Name: "观众画像记忆", Category: "talk", Desc: "老粉识别、进场提醒、{fanNote} 注入", Ready: true, Enabled: true, Testable: true},
 		{ID: "cloud_tts", Name: "云 TTS 音色", Category: "talk", Desc: "火山/阿里云音色，需填写凭证", Ready: false, Enabled: false},
