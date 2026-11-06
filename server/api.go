@@ -171,7 +171,8 @@ func (a *App) registerAPI(mux *http.ServeMux) {
 			q := strings.TrimSpace(r.URL.Query().Get("q"))
 			list := a.scripts.List()
 			if q != "" {
-				list = a.scripts.Relevant(q, 20)
+				scene := r.URL.Query().Get("scene")
+				list = a.scripts.Relevant(q, 20, scene)
 			}
 			writeJSON(w, 200, map[string]any{"ok": true, "categories": scriptCategories, "scripts": list})
 		}
@@ -204,13 +205,14 @@ func (a *App) registerAPI(mux *http.ServeMux) {
 	mux.HandleFunc("/api/scripts/ask", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Query string `json:"query"`
+			Scene string `json:"scene"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		q := strings.TrimSpace(body.Query)
 		if q == "" {
 			q = "现在直播有点冷场，帮我说一句留人的话"
 		}
-		refs := a.scripts.Relevant(q, 4)
+		refs := a.scripts.Relevant(q, 4, body.Scene)
 		var sb strings.Builder
 		sb.WriteString("以下是主播话术库里的参考话术，风格自然、口语、不要喊口号。\n")
 		for i, s := range refs {
