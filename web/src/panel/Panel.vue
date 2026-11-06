@@ -13,6 +13,68 @@ const hosts = computed(() => location.host)
 
 const themes = ['尺度大一点', '职场吐槽', '土味情话', '狠一点', '宠粉']
 
+// 转盘词条：主播可以自己改，一行一个
+const words = ref('')
+const speed = ref(4200)
+const speeds = [
+  { label: '慢', ms: 6200 },
+  { label: '标准', ms: 4200 },
+  { label: '快', ms: 2600 }
+]
+
+function loadWheel() {
+  try {
+    words.value = localStorage.getItem('dyw_wheel_words') || ''
+    const s = Number(localStorage.getItem('dyw_wheel_speed'))
+    if (s) speed.value = s
+  } catch {
+    /* ignore */
+  }
+}
+function saveWheel() {
+  try {
+    localStorage.setItem('dyw_wheel_words', words.value)
+    localStorage.setItem('dyw_wheel_speed', String(speed.value))
+  } catch {
+    /* ignore */
+  }
+}
+loadWheel()
+
+const wordList = computed(() =>
+  words.value
+    .split(/[\n,，、]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 12)
+)
+
+async function aiWords() {
+  if (busy.value) return
+  busy.value = 'AI 想词'
+  toast.value = 'AI 正在想词…'
+  try {
+    const r = await post('/api/game/words', { theme: theme.value })
+    if (r.items && r.items.length) {
+      words.value = r.items.join('\n')
+      saveWheel()
+      toast.value = '词想好了，可以改，再点开始'
+    } else {
+      toast.value = 'AI 没想出来，直接点开始也能用'
+    }
+  } catch (e) {
+    toast.value = '连不上服务：' + e.message
+  } finally {
+    busy.value = ''
+    setTimeout(() => (toast.value = ''), 2500)
+  }
+}
+
+function clearWords() {
+  words.value = ''
+  saveWheel()
+}
+
 onMounted(async () => {
   try {
     const d = await get('/api/game')
@@ -51,7 +113,14 @@ async function trigger(label, path, body) {
   }
 }
 
-const spin = () => trigger('大转盘', '/api/game/wheel', { theme: theme.value })
+const spin = () => {
+  saveWheel()
+  return trigger('大转盘', '/api/game/wheel', {
+    theme: theme.value,
+    items: wordList.value,
+    speed: speed.value
+  })
+}
 const guess = () => trigger('猜数字', '/api/game/guess')
 const traitor = () => trigger('抓叛徒', '/api/game/traitor')
 const clear = () => trigger('清屏', '/api/game/clear')
@@ -84,7 +153,7 @@ const statusText = computed(() => {
       <button class="big amber" :disabled="!!busy" @click="spin">
         <span class="ico">🎡</span>
         <span class="lab">一键大转盘</span>
-        <span class="sub">AI 现编 6 个惩罚词</span>
+        <span class="sub">{{ wordList.length ? `用你填的 ${wordList.length} 个词` : '没填词就让 AI 现编 6 个' }}</span>
       </button>
       <button class="big blue" :disabled="!!busy" @click="guess">
         <span class="ico">🔢</span>
@@ -104,7 +173,31 @@ const statusText = computed(() => {
     </div>
 
     <div class="theme">
-      <label>转盘主题（可选）</label>
+      <label>转盘词条（一行一个，2~12 个；不填就 AI 现编）</label>
+      <textarea
+        v-model="words"
+        rows="4"
+        placeholder="比如：&#10;做10个深蹲&#10;学猫叫三声&#10;用方言夸主播"
+        @change="saveWheel"
+      ></textarea>
+      <div class="row">
+        <button class="mini" :disabled="!!busy" @click="aiWords">AI 帮我想词</button>
+        <button class="mini ghost" @click="clearWords">清空</button>
+        <span class="count">{{ wordList.length }}/12</span>
+      </div>
+
+      <label class="mt">转盘速度</label>
+      <div class="chips">
+        <button
+          v-for="s in speeds"
+          :key="s.label"
+          class="chip"
+          :class="{ on: speed === s.ms }"
+          @click="speed = s.ms; saveWheel()"
+        >{{ s.label }}</button>
+      </div>
+
+      <label class="mt">AI 想词的主题（选了 AI 帮我想词才用）</label>
       <input v-model="theme" placeholder="比如：职场吐槽 / 尺度大一点" />
       <div class="chips">
         <button v-for="t in themes" :key="t" class="chip" @click="theme = t">{{ t }}</button>
@@ -174,7 +267,8 @@ h1 { font-size: 22px; margin: 0; letter-spacing: 1px; }
 
 .theme { margin-top: 18px; }
 .theme label { display: block; font-size: 13px; color: #8b93a7; margin-bottom: 8px; }
-.theme input {
+.theme input,
+.theme textarea {
   width: 100%;
   box-sizing: border-box;
   background: #12151d;
@@ -184,7 +278,26 @@ h1 { font-size: 22px; margin: 0; letter-spacing: 1px; }
   padding: 12px 14px;
   font-size: 15px;
   outline: none;
+  font-family: inherit;
+  resize: vertical;
 }
+.theme label.mt { margin-top: 16px; }
+.row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.mini {
+  background: rgba(255, 210, 74, 0.14);
+  border: 1px solid #6b5717;
+  color: #ffd24a;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.mini.ghost {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: #2b3242;
+  color: #cbd2e0;
+}
+.count { margin-left: auto; font-size: 13px; color: #8b93a7; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .chip {
   background: rgba(255, 255, 255, 0.06);
@@ -194,6 +307,12 @@ h1 { font-size: 22px; margin: 0; letter-spacing: 1px; }
   padding: 6px 12px;
   font-size: 13px;
   cursor: pointer;
+}
+.chip.on {
+  background: #ffd24a;
+  border-color: #ffd24a;
+  color: #2a1d00;
+  font-weight: 700;
 }
 
 footer {

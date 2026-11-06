@@ -60,11 +60,22 @@ func (a *App) registerAPI(mux *http.ServeMux) {
 
 	mux.HandleFunc("/api/game/wheel", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
+			Theme  string   `json:"theme"`
+			Items  []string `json:"items"`
+			Speed  int      `json:"speed"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		v := a.StartWheel(body.Theme, body.Items, body.Speed)
+		writeJSON(w, 200, map[string]any{"ok": true, "game": v})
+	})
+
+	// AI 只帮想词，不直接开转：主播先在面板上看一眼、能改
+	mux.HandleFunc("/api/game/words", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
 			Theme string `json:"theme"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		v := a.StartWheel(body.Theme)
-		writeJSON(w, 200, map[string]any{"ok": true, "game": v})
+		writeJSON(w, 200, map[string]any{"ok": true, "items": a.wheelItems(body.Theme)})
 	})
 
 	mux.HandleFunc("/api/game/guess", func(w http.ResponseWriter, r *http.Request) {

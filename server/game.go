@@ -58,10 +58,13 @@ func (a *App) broadcastGame(v GameView) {
 	a.hub.Broadcast("game", v)
 }
 
-// StartWheel 让 AI 按主题生成盘面，扇区与转动手感交给 canvas-spin-wheel，落点在舞台层定
-func (a *App) StartWheel(theme string) GameView {
+// StartWheel 主播自定义盘面优先；没填就让 AI 按主题现编。转动手感交给舞台层。
+func (a *App) StartWheel(theme string, items []string, speed int) GameView {
 	theme = strings.TrimSpace(theme)
-	items := a.wheelItems(theme)
+	items = cleanWheelItems(items)
+	if len(items) == 0 {
+		items = a.wheelItems(theme)
+	}
 
 	g := a.game
 	g.mu.Lock()
@@ -73,6 +76,7 @@ func (a *App) StartWheel(theme string) GameView {
 		Type:    "wheel",
 		Title:   firstNonEmpty(theme, "命运大转盘"),
 		Items:   items,
+		SpinMs:  speed,
 		Started: time.Now().UnixMilli(),
 	}
 	v.Tip = "转盘开转了，落点在大屏上"
@@ -136,6 +140,30 @@ func splitItems(text string, max int) []string {
 		if len(out) >= max {
 			break
 		}
+	}
+	return out
+}
+
+// cleanWheelItems 主播自己填的词条：去空行、去重、限长、限条数（2~12 条）
+func cleanWheelItems(in []string) []string {
+	out := make([]string, 0, len(in))
+	seen := map[string]bool{}
+	for _, raw := range in {
+		t := strings.Trim(strings.TrimSpace(raw), "，,、")
+		if t == "" || seen[t] {
+			continue
+		}
+		if r := []rune(t); len(r) > 12 {
+			t = string(r[:12])
+		}
+		seen[t] = true
+		out = append(out, t)
+		if len(out) >= 12 {
+			break
+		}
+	}
+	if len(out) < 2 {
+		return nil
 	}
 	return out
 }

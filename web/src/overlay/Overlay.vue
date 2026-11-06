@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { connectWs, get, post } from '../ws.js'
 import { LuckyWheel } from '@lucky-canvas/vue'
 
@@ -51,8 +51,8 @@ const blocks = [
   { padding: '8px', background: '#7a0d12', borderRadius: '50%' }
 ]
 const buttons = ref([])
-const luckyConfig = { speed: 18, accelerationTime: 1600, decelerationTime: 4200, offsetDegree: 0 }
-const luckyStyle = { fontSize: '24px', fontColor: '#fff', fontStyle: '"Microsoft YaHei", sans-serif', fontWeight: '900', wordWrap: true, lengthLimit: '84%' }
+const luckyConfig = reactive({ speed: 18, accelerationTime: 1600, decelerationTime: 4200, offsetDegree: 0 })
+const luckyStyle = { fontSize: '21px', fontColor: '#fff', fontStyle: '"Microsoft YaHei", sans-serif', fontWeight: '900', wordWrap: true, lengthLimit: '100%' }
 
 function setWheelItems(items) {
   prizes.value = items.map((text, i) => {
@@ -60,13 +60,13 @@ function setWheelItems(items) {
     return {
       name: text,
       background: bg,
-      fonts: [{ text, fontColor: fg, fontSize: items.length > 6 ? '22px' : '26px', fontWeight: '900' }]
+      fonts: [{ text, fontColor: fg, fontSize: items.length > 6 ? '20px' : '24px', fontWeight: '900' }]
     }
   })
   buttons.value = [
     {
-      radius: '20%',
-      background: 'radial-gradient(circle at 35% 30%, #fff6c8, #ffc93c 55%, #d98b00)',
+      radius: '17%',
+      background: '#ffcf5c',
       pointer: true,
       fonts: [{ text: '开转', fontColor: '#5a2b00', fontSize: '20px', fontWeight: '900' }]
     }
@@ -96,6 +96,10 @@ function onGame(d) {
   game.value = d
   if (d.type === 'wheel') {
     setWheelItems(d.items)
+    // 主播在面板上选的速度（慢/标准/快）决定转多久
+    const decel = Number(d.spinMs) || 4200
+    luckyConfig.decelerationTime = decel
+    luckyConfig.accelerationTime = Math.round(Math.min(1600, decel * 0.35))
   }
   if (d.type === 'guess') {
     guessSeq.value++
@@ -125,7 +129,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   cancelAnimationFrame(raf)
-  destroyWheel()
   window.removeEventListener('resize', setupCanvas)
   stopWs && stopWs()
 })
@@ -647,8 +650,6 @@ function enableAudio() {
 }
 @keyframes wheelGlow {
   0%, 100% { opacity: 0.7; }
-  50% { opacity: 1; }
-}
   50% { opacity: 1; }
 }
 .wheel-result {
