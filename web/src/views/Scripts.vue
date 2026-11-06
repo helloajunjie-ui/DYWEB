@@ -13,8 +13,7 @@ const scenes = [
   { id: 'all', name: '全部' },
   { id: '', name: '通用' },
   { id: 'fun', name: '娱乐' },
-  { id: 'ecom', name: '卖货' },
-  { id: 'auto', name: '无人' }
+  { id: 'ecom', name: '卖货' }
 ]
 const activeScene = ref('all')
 const activeCat = ref('all')
@@ -27,9 +26,14 @@ const busy = ref(false)
 
 const sceneName = (id) => scenes.find((s) => s.id === id)?.name || '通用'
 const sceneOf = (s) => s.scene || ''
-// 当前定位决定默认场景：娱乐只看「娱乐 + 通用」，卖货只看「卖货 + 通用」
+// 当前定位决定默认场景：讲娱乐只看「娱乐 + 通用」，讲卖货只看「卖货 + 通用」
+// 无人只是形态（无人娱乐 / 无人电商），不改变「讲什么」，所以还是看内容场景
 function sceneForMode(m) {
-  return m === 'fun' || m === 'ecom' || m === 'auto' ? m : 'all'
+  const c = (props.data.modes || []).find((x) => x.id === m)
+  if (c?.scene) return c.scene
+  if (m === 'fun' || m === 'fun_auto') return 'fun'
+  if (m === 'ecom' || m === 'ecom_auto') return 'ecom'
+  return 'all'
 }
 const sceneCount = (id) =>
   local.value.filter((s) => (id === 'all' ? true : id === '' ? !s.scene : !s.scene || s.scene === id)).length
@@ -213,7 +217,6 @@ async function resetEdit(s) {
         <option value="">通用（哪个场景都能用）</option>
         <option value="fun">娱乐</option>
         <option value="ecom">卖货</option>
-        <option value="auto">无人</option>
       </select>
       <label>分类</label>
       <select v-model="form.category">
@@ -240,7 +243,6 @@ async function resetEdit(s) {
         <option value="">通用（哪个场景都能用）</option>
         <option value="fun">娱乐</option>
         <option value="ecom">卖货</option>
-        <option value="auto">无人</option>
       </select>
       <label>分类</label>
       <select v-model="editForm.category">

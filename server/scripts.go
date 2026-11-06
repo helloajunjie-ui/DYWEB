@@ -12,7 +12,7 @@ import (
 type Script struct {
 	ID       string `json:"id"`
 	Category string `json:"category"`
-	// Scene 适用场景：""=通用，"fun"=娱乐，"ecom"=卖货，"auto"=无人
+	// Scene 适用场景：""=通用，"fun"=娱乐，"ecom"=卖货（「无人」是直播形态，与内容场景正交，不单独占一个场景）
 	Scene   string `json:"scene"`
 	Title   string `json:"title"`
 	Text    string `json:"text"`
@@ -81,10 +81,18 @@ func defaultScripts() []Script {
 		{Category: "close", Title: "下播留回访理由", Text: "今天就到这，明天这个点我还开，专门讲你们今天没问完的那几个问题，别到时候找不到我。"},
 		{Category: "close", Title: "下播感谢", Text: "谢谢今天陪我到最后的人，名字我都记着，明天见。"},
 
-		// 无人直播 · 循环口播
-		{Category: "keep", Scene: "auto", Title: "无人开场（讲清楚在卖什么）", Text: "欢迎进来的朋友，这里全天在线。今天讲的是这几样，想了解哪个直接打编号，我马上给你讲。"},
-		{Category: "keep", Scene: "auto", Title: "无人循环引关注", Text: "新来的朋友点个关注，关注之后不迷路，我这儿每天这个点都在，东西和价格都给你摆明白。"},
-		{Category: "cold", Scene: "auto", Title: "无人自动应答（没听清）", Text: "刚才有朋友问的问题我再讲一遍，怕新进来的没听到，重点就这一句：适合的再拍，不适合的我也不劝。"},
+		// 无人娱乐 · 游戏和聊天循环（人不在，靠游戏轮换 + AI 聊天撑场）
+		{Category: "keep", Scene: "fun", Title: "无人娱乐开场（说清在玩什么）", Text: "欢迎进来的朋友，这里全天在线。今天就在这儿玩游戏、聊天：转盘、猜数字、名字抽奖轮着来，想玩哪个打公屏告诉我。"},
+		{Category: "interact", Scene: "fun", Title: "游戏轮换口播（转盘/猜数字/抽奖）", Text: "这一轮玩完了，下一轮换个玩法。刚没赶上的别走，转盘马上再开一把，想参与的扣个「1」我记你名字。"},
+		{Category: "interact", Scene: "fun", Title: "聊天接弹幕（AI 陪聊）", Text: "公屏有朋友问今天怎么没见人，我在呢，就是躲镜头后面陪你们聊。想聊什么直接说，工作、感情、吃什么，我都接得住。"},
+		{Category: "cold", Scene: "fun", Title: "无人冷场接话（自问自答）", Text: "没人说话我就自己找话题：你们现在在干嘛？加班、带娃、还是躺着刷手机？打个字，我陪你聊到有人来。"},
+		{Category: "interact", Scene: "fun", Title: "点歌整活循环", Text: "想听歌的扣歌名，我这儿一直放着。唱得好刷个小心心，唱得不好也别走，看我翻车也是节目。"},
+
+		// 无人电商 · 自动推销和安利（人不在，循环讲品、答疑、接流量）
+		{Category: "keep", Scene: "ecom", Title: "无人开场（讲清楚在卖什么）", Text: "欢迎进来的朋友，这里全天在线。今天讲的是这几样，想了解哪个直接打编号，我马上给你讲。"},
+		{Category: "keep", Scene: "ecom", Title: "无人循环引关注", Text: "新来的朋友点个关注，关注之后不迷路，我这儿每天这个点都在，东西和价格都给你摆明白。"},
+		{Category: "push", Scene: "ecom", Title: "无人安利（只说一条主推）", Text: "今天就主推这一件，我不铺一堆让你挑花眼。适合谁、不适合谁、多少钱，我一遍一遍给你讲清楚，听明白了再拍。"},
+		{Category: "cold", Scene: "ecom", Title: "无人自动应答（没听清）", Text: "刚才有朋友问的问题我再讲一遍，怕新进来的没听到，重点就这一句：适合的再拍，不适合的我也不劝。"},
 	}
 	out := make([]Script, 0, len(raw))
 	for i := range raw {
@@ -292,7 +300,11 @@ func (s *ScriptStore) SetCustom(list []Script) error {
 		if it.Category == "" {
 			it.Category = "keep"
 		}
-		if it.Scene != "" && it.Scene != "fun" && it.Scene != "ecom" && it.Scene != "auto" {
+		// Scene 只分内容：""=通用，"fun"=娱乐，"ecom"=卖货；「无人」是直播形态，不是场景
+		if it.Scene == "auto" {
+			it.Scene = ""
+		}
+		if it.Scene != "" && it.Scene != "fun" && it.Scene != "ecom" {
 			it.Scene = ""
 		}
 		clean = append(clean, it)

@@ -269,7 +269,7 @@ func (a *App) performAction(rule Rule, act Action, ev Event, combo int) (string,
 		go func() {
 			// 让 AI 心里有数：喂话术库 + 当前主推商品的资料
 			var sb strings.Builder
-			if refs := a.scripts.Relevant(prompt, 3, a.cfg.Get().Mode); len(refs) > 0 {
+			if refs := a.scripts.Relevant(prompt, 3, ModeScene(a.cfg.Get().Mode)); len(refs) > 0 {
 				sb.WriteString("主播话术库里的参考说法（学语气，不要照抄）：\n")
 				for _, s := range refs {
 					sb.WriteString("- " + s.Text + "\n")

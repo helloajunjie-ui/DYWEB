@@ -27,7 +27,7 @@ type LLMConfig struct {
 	Temperature float64 `json:"temperature"`
 }
 
-// LiveMode 直播定位：三种常见直播间形态，决定「推荐开什么、重点看什么」
+// LiveMode 直播定位：两个轴——讲什么（娱乐/电商）× 有没有人（真人在/无人值守），组合成四种
 type LiveMode struct {
 	ID     string   `json:"id"`
 	Short  string   `json:"short"`
@@ -35,6 +35,7 @@ type LiveMode struct {
 	Desc   string   `json:"desc"`
 	Focus  string   `json:"focus"`
 	Script string   `json:"script"` // 话术库默认分类
+	Scene  string   `json:"scene"`  // 话术库默认场景：fun / ecom
 	Rec    []string `json:"rec"`    // 推荐模块 id
 	Tips   []string `json:"tips"`
 }
@@ -43,10 +44,11 @@ var liveModes = []LiveMode{
 	{
 		ID:     "fun",
 		Short:  "娱乐",
-		Name:   "娱乐直播（单人播）",
-		Desc:   "你一个人在播，场控替你看弹幕、接礼物、救冷场",
+		Name:   "娱乐直播（真人在）",
+	Desc:   "你本人在镜头前，场控替你看弹幕、接礼物、救冷场",
 		Focus:  "礼物感谢要快、冷场要有人接话、整活要跟得上",
 		Script: "keep",
+		Scene:  "fun",
 		Rec:    []string{"tts_local", "llm_chat", "fan_memory", "fx_particles", "fx_banner", "sfx_play", "key_hotkey"},
 		Tips: []string{
 			"礼物规则门槛别设太高，1 币也谢，气势要有",
@@ -55,26 +57,28 @@ var liveModes = []LiveMode{
 		},
 	},
 	{
-		ID:     "auto",
-		Short:  "无人",
-		Name:   "无人直播（AI 主导）",
-		Desc:   "人不在也撑住场面：AI 循环讲、自动应答、特效防刷",
-		Focus:  "稳定性第一，别让画面炸、别让 AI 乱说",
-		Script: "cold",
-		Rec:    []string{"llm_chat", "tts_local", "merge_antispam", "overlay_watchdog", "fps_guard", "fx_particles", "fan_memory"},
+		ID:     "fun_auto",
+		Short:  "无人娱乐",
+		Name:   "无人娱乐直播（做游戏和聊天）",
+		Desc:   "人不在镜头前，靠游戏轮换和 AI 聊天撑场，弹幕来了自动接",
+		Focus:  "别冷场：游戏一轮接一轮，聊天有人接",
+		Script: "interact",
+		Scene:  "fun",
+		Rec:    []string{"llm_chat", "tts_local", "merge_antispam", "overlay_watchdog", "fps_guard", "game_debate", "fx_particles"},
 		Tips: []string{
-			"先把「特效合并防刷」和「帧率护栏」开着，无人时最容易堆满粒子",
-			"AI 人设里加一句「不许承诺价格、不许说绝对」，能挡掉大部分口播事故",
-			"规则冷却时间加长（≥5 秒），避免同一个人连刷触发几十次",
+			"游戏别手动一个个点：用「手机中控台」循环开转盘 / 猜数字 / 名字抽奖，一轮接一轮",
+			"聊天交给 AI：先设好 AI 人设（比如陪聊室友），弹幕问什么它答什么",
+			"无人时先开「特效合并防刷」和「帧率护栏」，画面别堆粒子堆到卡死",
 		},
 	},
 	{
 		ID:     "ecom",
 		Short:  "电商",
-		Name:   "电商直播（主播助理）",
-		Desc:   "讲品、算账、避坑、催单，AI 当你的助播",
+		Name:   "电商直播（真人在）",
+		Desc:   "你本人在镜头前讲品，AI 当你的助播",
 		Focus:  "产品资料要录全、避坑话要说、退单率要压",
 		Script: "push",
+		Scene:  "ecom",
 		Rec:    []string{"llm_chat", "tts_local", "tts_browser", "fx_banner", "hook_webhook", "fan_memory", "obs_ws"},
 		Tips: []string{
 			"先去「产品库」录：卖点、适合谁、不适合谁、常见问题，AI 才有料讲",
@@ -82,7 +86,40 @@ var liveModes = []LiveMode{
 			"话术库里「促单 · 算账」「退货率友好版」是压退货率的主力",
 		},
 	},
+	{
+		ID:     "ecom_auto",
+		Short:  "无人电商",
+		Name:   "无人电商直播（自动推销和安利）",
+		Desc:   "人不在镜头前，自动循环讲品、安利卖点、答疑，接住进来的流量",
+		Focus:  "产品资料要全、口播要循环但不烦人、别让 AI 乱承诺",
+		Script: "push",
+		Scene:  "ecom",
+		Rec:    []string{"llm_chat", "tts_local", "merge_antispam", "overlay_watchdog", "fps_guard", "hook_webhook", "obs_ws"},
+		Tips: []string{
+			"先把「产品库」和主推商品录好，无人循环只讲这一条，别让它自己编",
+			"循环口播用「话术库 → 卖货」里的安利版，一段接一段，中间插感谢和避坑",
+			"AI 人设里加一句「不许承诺价格、不许说绝对」，无人时最怕口播事故",
+		},
+	},
 }
+
+func modeByID(id string) (LiveMode, bool) {
+	for _, m := range liveModes {
+		if m.ID == id {
+			return m, true
+		}
+	}
+	return LiveMode{}, false
+}
+
+// ModeScene 把直播定位换算成话术场景（无人不影响「讲什么」）
+func ModeScene(mode string) string {
+	if m, ok := modeByID(mode); ok {
+		return m.Scene
+	}
+	return ""
+}
+
 
 // WelcomeConfig 进场欢迎门槛：三项可分别开关（只欢迎高等级 / 高粉丝团 / 高消费，任意一项达标就欢迎）
 type WelcomeConfig struct {
@@ -225,6 +262,13 @@ func loadConfig(dir string) *ConfigStore {
 	}
 	if c.Mode == "" {
 		c.Mode = def.Mode
+	}
+	// 老配置把「无人」当成第三种直播类型（auto），现在拆成「有没有人 × 讲什么」两个轴：auto 按无人娱乐迁移
+	if c.Mode == "auto" {
+		c.Mode = "fun_auto"
+	}
+	if _, ok := modeByID(c.Mode); !ok {
+		c.Mode = "fun"
 	}
 	if c.LLM.TimeoutMS == 0 {
 		c.LLM.TimeoutMS = def.LLM.TimeoutMS
