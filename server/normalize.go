@@ -24,6 +24,7 @@ func normalize(raw map[string]any, cfg Config) Event {
 	ev.GiftValue = parseNum(lookupAny(raw, cfg.Mapping["giftValue"]))
 	ev.Level = int(parseNum(lookupAny(raw, cfg.Mapping["level"])))
 	ev.GuardLevel = int(parseNum(lookupAny(raw, cfg.Mapping["guardLevel"])))
+	ev.FansClubLevel = int(parseNum(lookupAny(raw, cfg.Mapping["fansClubLevel"])))
 	if ts := parseNum(lookupAny(raw, cfg.Mapping["ts"])); ts > 0 {
 		if ts < 1e11 { // 秒级时间戳
 			ts *= 1000

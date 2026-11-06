@@ -127,6 +127,7 @@ func defaultConfig() Config {
 			"giftCount": {"giftCount", "gift_count", "count", "num", "repeat", "repeatCount", "data.gift.count", "Data.Gift.RepeatCount"},
 			"giftValue": {"giftValue", "gift_value", "price", "diamond", "diamondCount", "data.gift.diamond", "Data.Gift.DiamondCount"},
 			"guardLevel": {"guardLevel", "guard_level", "guardType", "data.guard.level", "Data.User.FansClubInfo.Data.GuardLevel"},
+			"fansClubLevel": {"fansClubLevel", "fansclub_level", "fansClubLevelInt", "fanClubLevel", "fansLevel", "data.user.fansClubInfo.level", "Data.User.FansClubInfo.Level"},
 			"ts":        {"ts", "TS", "timestamp", "time", "createTime", "data.ts"},
 		},
 		TypeAliases: map[string][]string{

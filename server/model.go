@@ -10,6 +10,7 @@ type Event struct {
 	Avatar    string  `json:"avatar"`
 	Level     int     `json:"level"`
 	GuardLevel int    `json:"guardLevel"` // 星守护等级 1~3，0=非守护
+	FansClubLevel int `json:"fansClubLevel"` // 粉丝团等级，0=没加团
 	Text      string  `json:"text"`
 	GiftName  string  `json:"giftName"`
 	GiftCount int     `json:"giftCount"`
@@ -109,6 +110,12 @@ type GifterStat struct {
 	Avatar string  `json:"avatar"`
 }
 
+// FanNote 一条人工备注（带时间，方便回看）
+type FanNote struct {
+	TS   int64  `json:"ts"`
+	Text string `json:"text"`
+}
+
 // Fan 观众画像记忆节点
 type Fan struct {
 	Key        string  `json:"key"` // 归一化后的 key
@@ -120,10 +127,12 @@ type Fan struct {
 	GiftValue  float64 `json:"giftValue"`
 	FirstSeen  int64   `json:"firstSeen"`
 	LastSeen   int64   `json:"lastSeen"`
-	Note       string  `json:"note"`   // 人工备注
+	Note       string  `json:"note"`   // 人工备注（最近一条，注入 {fanNote}）
+	Notes      []FanNote `json:"notes"` // 备注历史：主播可以反复补，不被覆盖
 	Tags       []string `json:"tags"`  // 标签
 	Regular    bool    `json:"regular"` // 自动判定老粉
 	GuardLevel int     `json:"guardLevel"` // 星守护等级（取最高）
 	FansClub   bool    `json:"fansClub"`   // 已加入粉丝团
+	FansClubLevel int  `json:"fansClubLevel"` // 粉丝团等级
 	Followed   bool    `json:"followed"`   // 已关注主播
 }

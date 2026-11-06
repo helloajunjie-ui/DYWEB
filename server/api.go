@@ -480,6 +480,7 @@ func (a *App) registerAPI(mux *http.ServeMux) {
 			Value float64       `json:"giftValue"`
 			Level int           `json:"level"`
 			GuardLevel int      `json:"guardLevel"`
+			FansClubLevel int   `json:"fansClubLevel"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeJSON(w, 400, map[string]any{"ok": false, "msg": err.Error()})
@@ -511,6 +512,9 @@ func (a *App) registerAPI(mux *http.ServeMux) {
 			}
 			if body.GuardLevel > 0 {
 				raw["guardLevel"] = body.GuardLevel
+			}
+			if body.FansClubLevel > 0 {
+				raw["fansClubLevel"] = body.FansClubLevel
 			}
 		}
 		ev := a.HandleRaw(raw)

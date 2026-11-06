@@ -9,7 +9,7 @@ const props = defineProps({
 })
 
 const msg = ref('')
-const form = ref({ type: 'danmaku', user: '测试观众', text: '主播好呀', giftName: '小心心', giftCount: 1, giftValue: 1, level: 0, guardLevel: 1 })
+const form = ref({ type: 'danmaku', user: '测试观众', text: '主播好呀', giftName: '小心心', giftCount: 1, giftValue: 1, level: 0, guardLevel: 1, fansClubLevel: 0 })
 const rawJson = ref('')
 const ttsText = ref('测试一下，声音正常吗')
 const sfxFile = ref('')
@@ -107,8 +107,10 @@ async function testLlm() {
           <label>守护等级</label>
           <input v-model.number="form.guardLevel" type="number" min="1" max="3" />
         </template>
-        <label>观众等级</label>
+        <label>账号等级</label>
         <input v-model.number="form.level" type="number" min="0" />
+        <label>粉丝团等级</label>
+        <input v-model.number="form.fansClubLevel" type="number" min="0" />
       </div>
       <div class="row" style="margin-top: 12px">
         <button class="btn primary" @click="simulate">发送事件</button>

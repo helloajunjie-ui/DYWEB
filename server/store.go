@@ -120,6 +120,10 @@ func (s *Store) Add(e Event) Event {
 		if e.Type == "fansclub" {
 			f.FansClub = true
 		}
+		if e.FansClubLevel > f.FansClubLevel {
+			f.FansClubLevel = e.FansClubLevel
+			f.FansClub = true
+		}
 		if e.GuardLevel > f.GuardLevel {
 			f.GuardLevel = e.GuardLevel
 		}
@@ -205,6 +209,12 @@ func (s *Store) SetFanNote(key, note string, tags []string) bool {
 	f := s.fans[key]
 	if f == nil {
 		return false
+	}
+	if note != "" && note != f.Note {
+		f.Notes = append(f.Notes, FanNote{TS: time.Now().UnixMilli(), Text: note})
+		if len(f.Notes) > 20 {
+			f.Notes = f.Notes[len(f.Notes)-20:]
+		}
 	}
 	f.Note = note
 	if tags != nil {
