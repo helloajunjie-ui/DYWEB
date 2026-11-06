@@ -46,9 +46,8 @@ const wheelPalette = [
 
 const prizes = ref([])
 const blocks = [
-  { padding: '8px', background: 'linear-gradient(0deg, #7a0d12, #d81e26)', borderRadius: '50%' },
-  { padding: '8px', background: '#ffe08a', borderRadius: '50%' },
-  { padding: '8px', background: '#7a0d12', borderRadius: '50%' }
+  { padding: '10px', background: '#ffcf5c', borderRadius: '50%' },
+  { padding: '0px', background: '#5a1a10', borderRadius: '50%' }
 ]
 const buttons = ref([])
 const luckyConfig = reactive({ speed: 18, accelerationTime: 1600, decelerationTime: 4200, offsetDegree: 0 })
@@ -65,10 +64,10 @@ function setWheelItems(items) {
   })
   buttons.value = [
     {
-      radius: '17%',
+      radius: '13%',
       background: '#ffcf5c',
       pointer: true,
-      fonts: [{ text: '开转', fontColor: '#5a2b00', fontSize: '20px', fontWeight: '900' }]
+      fonts: [{ text: '开转', fontColor: '#5a2b00', fontSize: '17px', fontWeight: '900' }]
     }
   ]
 }
