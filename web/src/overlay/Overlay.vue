@@ -1,7 +1,6 @@
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { connectWs, get, post } from '../ws.js'
-import { LuckyWheel } from '@lucky-canvas/vue'
 
 const canvasRef = ref(null)
 const stageRef = ref(null)
@@ -31,59 +30,102 @@ const maxParticles = ref(800)
 // 中控面板触发的游戏状态
 const game = ref(null)
 const guessSeq = ref(0)
-const luckyRef = ref(null)
 
-const wheelPalette = [
-  ['#ff4d6d', '#ffffff'],
-  ['#ffd166', '#5a3200'],
-  ['#06d6a0', '#043f2f'],
-  ['#4cc9f0', '#04283a'],
-  ['#b5179e', '#ffffff'],
-  ['#f77f00', '#3a1c00'],
-  ['#8338ec', '#ffffff'],
-  ['#2a9d8f', '#ffffff']
+// 转盘：自绘 SVG 盘面（深红金浮雕风），转动用 CSS 缓动
+const wheelRot = ref(0)
+const wheelDur = ref(4200)
+const wheelSpin = ref(false)
+const wheelWinner = ref('')
+const wheelWinIdx = ref(-1)
+const wheelSlices = ref([])
+
+// 赛博霓虹配色：每块一个色相，中心深、外缘亮，靠色相拉开隔离
+const sliceThemes = [
+  { a: '#14364f', b: '#1fb6ff', glow: '#5fd8ff' }, // 冰蓝
+  { a: '#2c1442', b: '#b14bff', glow: '#d29bff' }, // 紫
+  { a: '#38102a', b: '#ff3d8a', glow: '#ff9ac4' }, // 洋红
+  { a: '#0d2e2b', b: '#00e5a8', glow: '#7dffd9' }, // 青绿
+  { a: '#33240a', b: '#ffb01f', glow: '#ffd77a' }, // 琥珀
+  { a: '#182443', b: '#4d7cff', glow: '#a3bcff' }, // 蓝紫
+  { a: '#361310', b: '#ff4d3d', glow: '#ffa59a' }, // 红
+  { a: '#0f2e3d', b: '#00d0ff', glow: '#96efff' } // 天青
 ]
 
-const prizes = ref([])
-const blocks = [
-  { padding: '10px', background: '#ffcf5c', borderRadius: '50%' },
-  { padding: '0px', background: '#5a1a10', borderRadius: '50%' }
-]
-const buttons = ref([])
-const luckyConfig = reactive({ speed: 18, accelerationTime: 1600, decelerationTime: 4200, offsetDegree: 0 })
-const luckyStyle = { fontSize: '21px', fontColor: '#fff', fontStyle: '"Microsoft YaHei", sans-serif', fontWeight: '900', wordWrap: true, lengthLimit: '100%' }
-
-function setWheelItems(items) {
-  prizes.value = items.map((text, i) => {
-    const [bg, fg] = wheelPalette[i % wheelPalette.length]
+function buildSlices(items) {
+  const n = items.length
+  const seg = 360 / n
+  return items.map((text, i) => {
+    const t = sliceThemes[i % sliceThemes.length]
+    const mid = -90 + seg * (i + 0.5)
+    // 落在下半圈的扇区把文字翻 180°，避免“倒着念”
+    const m = ((mid % 360) + 360) % 360
+    const flip = m > 90 && m < 270
     return {
-      name: text,
-      background: bg,
-      fonts: [{ text, fontColor: fg, fontSize: items.length > 6 ? '20px' : '24px', fontWeight: '900' }]
+      text,
+      i,
+      a0: -90 + seg * i + 0.7,
+      a1: -90 + seg * (i + 1) - 0.7,
+      mid,
+      seg,
+      from: t.a,
+      to: t.b,
+      glow: t.glow,
+      labelRot: flip ? mid + 180 : mid,
+      labelX: flip ? -(R_TEXT - 6) : R_TEXT - 6,
+      labelAnchor: flip ? 'start' : 'end',
+      lines: splitLabel(text)
     }
   })
-  buttons.value = [
-    {
-      radius: '13%',
-      background: '#ffcf5c',
-      pointer: true,
-      fonts: [{ text: '开转', fontColor: '#5a2b00', fontSize: '17px', fontWeight: '900' }]
-    }
-  ]
 }
 
-function onWheelStart() {
-  const r = luckyRef.value
-  if (!r) return
-  r.play()
-  const idx = Math.floor(Math.random() * prizes.value.length)
-  // 先加速转一会儿再定落点，看着像真转盘
-  setTimeout(() => r.stop(idx), 1400)
+function splitLabel(text) {
+  const s = String(text || '')
+  if (s.length <= 5) return [s]
+  const mid = Math.ceil(s.length / 2)
+  return [s.slice(0, mid), s.slice(mid)]
 }
 
-function onWheelEnd(prize) {
-  const text = prize && prize.name ? prize.name : ''
-  if (text) post('/api/game/result', { text }).catch(() => {})
+const R_OUT = 252
+const R_TEXT = 206
+
+function pt(r, deg) {
+  const a = (deg * Math.PI) / 180
+  return [260 + r * Math.cos(a), 260 + r * Math.sin(a)]
+}
+
+function slicePath(sl) {
+  const [x0, y0] = pt(R_OUT, sl.a0)
+  const [x1, y1] = pt(R_OUT, sl.a1)
+  return `M 260 260 L ${x0.toFixed(2)} ${y0.toFixed(2)} A ${R_OUT} ${R_OUT} 0 0 1 ${x1.toFixed(2)} ${y1.toFixed(2)} Z`
+}
+
+function startWheel(items, ms) {
+  wheelSlices.value = buildSlices(items)
+  wheelWinner.value = ''
+  wheelWinIdx.value = -1
+  wheelDur.value = Number(ms) || 4200
+  wheelSpin.value = false
+  wheelRot.value = 0
+
+  const n = items.length
+  const idx = Math.floor(Math.random() * n)
+  const seg = 360 / n
+  const jitter = (Math.random() - 0.5) * seg * 0.45
+  // 指针在正上方，让 idx 扇区中心停在 12 点，外加 6 圈
+  const target = 360 * 6 - seg * (idx + 0.5) + jitter
+  wheelRot.value = 0
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      wheelSpin.value = true
+      wheelRot.value = target
+    })
+  })
+  setTimeout(() => {
+    wheelSpin.value = false
+    wheelWinIdx.value = idx
+    wheelWinner.value = items[idx]
+    post('/api/game/result', { text: items[idx] }).catch(() => {})
+  }, wheelDur.value + 150)
 }
 
 function onGame(d) {
@@ -94,11 +136,7 @@ function onGame(d) {
   if (d.type === 'wheel' && (!d.items || !d.items.length)) return
   game.value = d
   if (d.type === 'wheel') {
-    setWheelItems(d.items)
-    // 主播在面板上选的速度（慢/标准/快）决定转多久
-    const decel = Number(d.spinMs) || 4200
-    luckyConfig.decelerationTime = decel
-    luckyConfig.accelerationTime = Math.round(Math.min(1600, decel * 0.35))
+    startWheel(d.items, d.spinMs)
   }
   if (d.type === 'guess') {
     guessSeq.value++
@@ -464,19 +502,97 @@ function enableAudio() {
       <div class="wheel-title">{{ game.title }}</div>
       <div class="wheel-box">
         <div class="wheel-glow"></div>
-        <LuckyWheel
-          ref="luckyRef"
-          width="520px"
-          height="520px"
-          :prizes="prizes"
-          :blocks="blocks"
-          :buttons="buttons"
-          :defaultConfig="luckyConfig"
-          :defaultStyle="luckyStyle"
-          @start="onWheelStart"
-          @end="onWheelEnd"
-        />
+        <!-- 外圈金环 + 灯珠 -->
+        <div class="wheel-rim">
+          <i
+            v-for="n in 24"
+            :key="n"
+            class="bulb"
+            :style="{ transform: 'rotate(' + n * 15 + 'deg) translateY(-258px)', animationDelay: n * 0.07 + 's' }"
+          ></i>
+        </div>
+        <svg viewBox="0 0 520 520" class="wheel-svg">
+          <defs>
+            <linearGradient id="rimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#8ff4ff" />
+              <stop offset="35%" stop-color="#4ac7ff" />
+              <stop offset="70%" stop-color="#c04bff" />
+              <stop offset="100%" stop-color="#ff3d8a" />
+            </linearGradient>
+            <radialGradient id="plateGrad" cx="50%" cy="50%" r="60%">
+              <stop offset="0%" stop-color="#0d1424" />
+              <stop offset="100%" stop-color="#05070e" />
+            </radialGradient>
+            <filter id="rimShadow" x="-25%" y="-25%" width="150%" height="150%">
+              <feDropShadow dx="0" dy="0" stdDeviation="12" flood-color="rgba(80, 200, 255, .55)" />
+              <feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="rgba(0, 0, 0, .6)" />
+            </filter>
+          </defs>
+
+          <!-- 外圈霓虹环 + 内层暗盘，中间留一道暗缝做边界 -->
+          <circle cx="260" cy="260" r="256" fill="url(#rimGrad)" filter="url(#rimShadow)" />
+          <circle cx="260" cy="260" r="246" fill="#03050a" />
+          <circle cx="260" cy="260" r="242" fill="url(#plateGrad)" />
+
+          <g
+            class="wheel-rotor"
+            :style="{
+              transform: 'rotate(' + wheelRot + 'deg)',
+              transitionDuration: wheelDur + 'ms',
+              transitionTimingFunction: 'cubic-bezier(.12,.72,.16,1)'
+            }"
+          >
+            <g v-for="sl in wheelSlices" :key="sl.i">
+              <radialGradient :id="'sg' + sl.i" gradientUnits="userSpaceOnUse" cx="260" cy="260" r="252">
+                <stop offset="0%" :stop-color="sl.from" />
+                <stop offset="55%" :stop-color="sl.from" />
+                <stop offset="100%" :stop-color="sl.to" />
+              </radialGradient>
+              <path
+                :d="slicePath(sl)"
+                :fill="'url(#sg' + sl.i + ')'"
+                :stroke="sl.glow"
+                stroke-width="2"
+                class="slice"
+                :class="{ lit: wheelWinIdx === sl.i, dim: wheelWinIdx >= 0 && wheelWinIdx !== sl.i }"
+                :style="{ filter: 'drop-shadow(0 0 10px ' + sl.glow + ')' + (wheelWinIdx === sl.i ? ' brightness(1.4) saturate(1.3)' : '') }"
+              />
+            </g>
+
+            <!-- 中奖块的高亮闪动覆盖层 -->
+            <path
+              v-for="sl in wheelSlices"
+              :key="'w' + sl.i"
+              v-show="wheelWinIdx === sl.i"
+              :d="slicePath(sl)"
+              class="win-flash"
+              :style="{ stroke: sl.glow }"
+            />
+
+            <!-- 文字：沿半径方向，从外向内读 -->
+            <g v-for="sl in wheelSlices" :key="'t' + sl.i" :transform="'translate(260 260) rotate(' + sl.labelRot + ')'">
+              <text
+                v-for="(line, li) in sl.lines"
+                :key="li"
+                :x="sl.labelX"
+                :y="sl.lines.length > 1 ? (li === 0 ? -10 : 22) : 9"
+                :text-anchor="sl.labelAnchor"
+                class="wheel-label"
+                :class="{ lit: wheelWinIdx === sl.i }"
+                :style="{ fontSize: (sl.lines.length > 1 ? 22 : 25) + 'px', filter: 'drop-shadow(0 0 7px ' + sl.glow + ')' }"
+              >{{ line }}</text>
+            </g>
+          </g>
+
+          <circle cx="260" cy="260" r="54" fill="url(#rimGrad)" opacity="0.95" />
+          <circle cx="260" cy="260" r="46" fill="#05070e" stroke="#7de9ff" stroke-width="2" />
+          <circle cx="260" cy="260" r="38" fill="none" stroke="rgba(125, 233, 255, 0.35)" stroke-width="1" />
+          <text x="260" y="268" text-anchor="middle" class="hub-text">开转</text>
+        </svg>
+        <div class="wheel-scan"></div>
+        <div class="wheel-pointer"></div>
       </div>
+      <div v-if="wheelWinner" class="wheel-win">🎉 {{ wheelWinner }}</div>
     </div>
 
     <!-- 猜数字 -->
@@ -627,8 +743,8 @@ function enableAudio() {
   font-size: 38px;
   font-weight: 900;
   letter-spacing: 3px;
-  color: #ffe9a8;
-  text-shadow: 0 0 18px rgba(255, 190, 60, 0.85), 0 4px 16px rgba(0, 0, 0, 0.8);
+  color: #bff6ff;
+  text-shadow: 0 0 18px rgba(90, 220, 255, 0.9), 0 4px 16px rgba(0, 0, 0, 0.85);
   margin-bottom: 18px;
 }
 .wheel-box {
@@ -641,11 +757,125 @@ function enableAudio() {
 }
 .wheel-glow {
   position: absolute;
-  inset: -10px;
+  inset: -14px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 205, 90, 0.34) 0%, rgba(255, 150, 30, 0.16) 54%, rgba(0, 0, 0, 0) 72%);
-  filter: blur(16px);
+  background: radial-gradient(circle, rgba(255, 190, 80, 0.30) 0%, rgba(190, 40, 20, 0.18) 52%, rgba(0, 0, 0, 0) 72%);
+  filter: blur(18px);
   animation: wheelGlow 2.2s ease-in-out infinite;
+}
+.wheel-rim {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.bulb {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%;
+  background: #bff6ff;
+  box-shadow: 0 0 10px 3px rgba(90, 220, 255, 0.9);
+  animation: twinkle 1.05s ease-in-out infinite alternate;
+}
+.wheel-svg {
+  width: 520px;
+  height: 520px;
+  display: block;
+  filter: drop-shadow(0 18px 46px rgba(0, 0, 0, 0.55));
+}
+.wheel-rotor {
+  transform-origin: 260px 260px;
+  transition-property: transform;
+  will-change: transform;
+}
+.wheel-label {
+  fill: #fff6dc;
+  font-family: "Microsoft YaHei", sans-serif;
+  font-weight: 800;
+  paint-order: stroke;
+  stroke: rgba(48, 6, 4, 0.75);
+  stroke-width: 3px;
+  letter-spacing: 2px;
+}
+.hub-text {
+  fill: #9ef0ff;
+  font-family: "Microsoft YaHei", sans-serif;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 3px;
+}
+.wheel-pointer {
+  position: absolute;
+  left: 50%;
+  top: -10px;
+  margin-left: -16px;
+  width: 0;
+  height: 0;
+  border-left: 16px solid transparent;
+  border-right: 16px solid transparent;
+  border-top: 42px solid #7de9ff;
+  filter: drop-shadow(0 0 10px rgba(90, 220, 255, 0.95)) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.7));
+  z-index: 3;
+  animation: pointerPulse 1.5s ease-in-out infinite;
+}
+@keyframes pointerPulse {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(90, 220, 255, 0.8)) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.7)); }
+  50% { filter: drop-shadow(0 0 18px rgba(120, 235, 255, 1)) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.7)); }
+}
+.slice {
+  transition: opacity 0.35s ease;
+}
+.slice.dim {
+  opacity: 0.5;
+}
+.wheel-scan {
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: repeating-linear-gradient(180deg, rgba(120, 220, 255, 0.14) 0px, rgba(120, 220, 255, 0.14) 1px, transparent 1px, transparent 4px);
+  mix-blend-mode: screen;
+  opacity: 0.3;
+  animation: scanMove 2.4s linear infinite;
+}
+@keyframes scanMove {
+  from { background-position: 0 0; }
+  to { background-position: 0 40px; }
+}
+.win-flash {
+  fill: rgba(255, 255, 255, 0.03);
+  stroke-width: 4;
+  pointer-events: none;
+  animation: winFlash 0.55s ease-in-out infinite alternate;
+}
+@keyframes winFlash {
+  from { opacity: 0.25; }
+  to { opacity: 1; }
+}
+.wheel-label.lit {
+  fill: #ffffff;
+  font-weight: 900;
+}
+.wheel-win {
+  margin-top: 14px;
+  padding: 10px 30px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(8, 20, 36, 0.92), rgba(4, 8, 14, 0.92));
+  border: 2px solid #7de9ff;
+  color: #bff6ff;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  box-shadow: 0 0 26px rgba(90, 220, 255, 0.55);
+  animation: pop 0.4s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+@keyframes twinkle {
+  from { opacity: 0.3; }
+  to { opacity: 1; }
 }
 @keyframes wheelGlow {
   0%, 100% { opacity: 0.7; }
