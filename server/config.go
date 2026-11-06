@@ -156,13 +156,14 @@ func defaultConfig() Config {
 
 // ConfigStore 配置读写
 type ConfigStore struct {
-	mu   sync.RWMutex
-	cfg  Config
-	path string
+	mu         sync.RWMutex
+	cfg        Config
+	path       string
+	secretPath string
 }
 
 func loadConfig(dir string) *ConfigStore {
-	cs := &ConfigStore{cfg: defaultConfig(), path: filepath.Join(dir, "config.json")}
+	cs := &ConfigStore{cfg: defaultConfig(), path: filepath.Join(dir, "config.json"), secretPath: filepath.Join(dir, "secret.dat")}
 	b, err := os.ReadFile(cs.path)
 	if err != nil {
 		_ = cs.write()
@@ -171,6 +172,14 @@ func loadConfig(dir string) *ConfigStore {
 	var c Config
 	if err := json.Unmarshal(b, &c); err != nil {
 		return cs
+	}
+	legacyPlain := c.LLM.APIKey != ""
+	if legacyPlain {
+		// 老版本把 Key 明文写在 config.json：先读出来，稍后加密迁移
+	} else if raw, err := os.ReadFile(cs.secretPath); err == nil {
+		if key, derr := unprotectSecret(string(raw)); derr == nil {
+			c.LLM.APIKey = key
+		}
 	}
 	// 补齐缺省项
 	def := defaultConfig()
@@ -224,7 +233,18 @@ func loadConfig(dir string) *ConfigStore {
 		c.LLM.System = def.LLM.System
 	}
 	cs.cfg = c
+	if legacyPlain {
+		// 明文迁移：加密写入 secret.dat，同时把 config.json 里的 apiKey 清空
+		_ = cs.write()
+	}
 	return cs
+}
+
+// masked 返回可安全落盘/下发的配置副本：不含明文 Key
+func (cs *ConfigStore) masked() Config {
+	c := cs.cfg
+	c.LLM.APIKey = ""
+	return c
 }
 
 func (cs *ConfigStore) Get() Config {
@@ -235,6 +255,10 @@ func (cs *ConfigStore) Get() Config {
 
 func (cs *ConfigStore) Set(c Config) error {
 	cs.mu.Lock()
+	// 前端拿不到明文 Key：空值表示「沿用已保存的那把」，不能把它当成清空
+	if c.LLM.APIKey == "" {
+		c.LLM.APIKey = cs.cfg.LLM.APIKey
+	}
 	cs.cfg = c
 	cs.mu.Unlock()
 	return cs.write()
@@ -242,10 +266,30 @@ func (cs *ConfigStore) Set(c Config) error {
 
 func (cs *ConfigStore) write() error {
 	cs.mu.RLock()
-	b, err := json.MarshalIndent(cs.cfg, "", "  ")
+	enc, err := protectSecret(cs.cfg.LLM.APIKey)
+	if err != nil {
+		cs.mu.RUnlock()
+		return err
+	}
+	b, err := json.MarshalIndent(cs.masked(), "", "  ")
 	cs.mu.RUnlock()
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(cs.path, b, 0o644)
+	if err := os.WriteFile(cs.path, b, 0o644); err != nil {
+		return err
+	}
+	if enc != "" {
+		if err := os.WriteFile(cs.secretPath, []byte(enc), 0o600); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// HasAPIKey 供接口判断「本机是否已存了 Key」（不返回明文）
+func (cs *ConfigStore) HasAPIKey() bool {
+	cs.mu.RLock()
+	defer cs.mu.RUnlock()
+	return cs.cfg.LLM.APIKey != ""
 }

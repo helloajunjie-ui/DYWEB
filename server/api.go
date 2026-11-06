@@ -439,7 +439,14 @@ func (a *App) registerAPI(mux *http.ServeMux) {
 
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
-			writeJSON(w, 200, a.cfg.Get())
+			// 不回传明文 Key：只告诉前端「本机已存过」
+			c := a.cfg.Get()
+			c.LLM.APIKey = ""
+			b, _ := json.Marshal(c)
+			var m map[string]any
+			_ = json.Unmarshal(b, &m)
+			m["apiKeySaved"] = a.cfg.HasAPIKey()
+			writeJSON(w, 200, m)
 			return
 		}
 		var c Config

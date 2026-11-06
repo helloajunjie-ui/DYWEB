@@ -14,6 +14,7 @@ const aiMsg = ref('')
 const busy = ref(false)
 const showAdvanced = ref(false)
 const showSystem = ref(false)
+const keySaved = ref(false)
 
 // 一次只显示一件事：先选要调什么，再出对应配置
 const tab = ref('ai')
@@ -79,12 +80,21 @@ async function probe() {
   aiMsg.value = res.ok ? `通了！模型回你：${res.reply}` : '不通：' + (res.error || '未知原因')
 }
 
-onMounted(() => {
+onMounted(async () => {
   if (!cfg.value.llm) cfg.value.llm = {}
   if (!cfg.value.tts) cfg.value.tts = {}
   if (!cfg.value.tts.rate) cfg.value.tts.rate = 0
   if (!cfg.value.tts.volume) cfg.value.tts.volume = 90
-  if (cfg.value.llm.baseUrl && cfg.value.llm.apiKey) {
+  try {
+    const c = await (await fetch('/api/config')).json()
+    keySaved.value = !!c.apiKeySaved
+    if (c.llm) {
+      // 后端不再回传明文 Key：只同步「有没有存过」
+      c.llm.apiKey = ''
+      cfg.value.llm = { ...cfg.value.llm, ...c.llm }
+    }
+  } catch (e) {}
+  if (cfg.value.llm.baseUrl && (cfg.value.llm.apiKey || keySaved.value)) {
     tab.value = 'ai'
     fetchModels()
   } else if (cfg.value.tts && cfg.value.tts.enabled) {
@@ -102,6 +112,7 @@ async function save() {
     return
   }
   const res = await post('/api/config', cfg.value)
+  if (res.ok && cfg.value.llm.apiKey) keySaved.value = true
   msg.value = res.ok ? '已自动保存' : '保存失败：' + (res.msg || '')
   setTimeout(() => {
     if (msg.value === '已自动保存') msg.value = ''
@@ -157,8 +168,12 @@ function setTtsMode(m) {
 
     <div class="step">
       <b>2. 把 Key 粘进来</b>
-      <input v-model="cfg.llm.apiKey" placeholder="sk-...（粘一次就存在本机，下次不用再粘）" />
-      <div class="hint" style="margin-top: 6px">Ollama 是本机跑的，这格可以留空。</div>
+      <input v-model="cfg.llm.apiKey" placeholder="sk-...（粘一次就加密存本机，下次不用再粘）" />
+      <div class="hint" style="margin-top: 6px">
+        <span v-if="keySaved && !cfg.llm.apiKey" class="tag ok" style="margin-right: 6px">Key 已加密保存</span>
+        <span v-if="keySaved && !cfg.llm.apiKey">留空 = 沿用已保存的那把；粘贴新 Key 会直接替换。</span>
+        <span v-else>Key 用 Windows 本机加密（DPAPI）存，配置文件里不会出现明文；Ollama 是本机跑的，这格可以留空。</span>
+      </div>
     </div>
 
     <div class="step">
