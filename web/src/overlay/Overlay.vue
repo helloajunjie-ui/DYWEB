@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { connectWs, get, post } from '../ws.js'
 
 const canvasRef = ref(null)
@@ -39,16 +39,16 @@ const wheelWinner = ref('')
 const wheelWinIdx = ref(-1)
 const wheelSlices = ref([])
 
-// 赛博霓虹配色：每块一个色相，中心深、外缘亮，靠色相拉开隔离
+// 彩色玻璃：宝石色玻璃片 + 深色铅条分隔，不发光
 const sliceThemes = [
-  { a: '#14364f', b: '#1fb6ff', glow: '#5fd8ff' }, // 冰蓝
-  { a: '#2c1442', b: '#b14bff', glow: '#d29bff' }, // 紫
-  { a: '#38102a', b: '#ff3d8a', glow: '#ff9ac4' }, // 洋红
-  { a: '#0d2e2b', b: '#00e5a8', glow: '#7dffd9' }, // 青绿
-  { a: '#33240a', b: '#ffb01f', glow: '#ffd77a' }, // 琥珀
-  { a: '#182443', b: '#4d7cff', glow: '#a3bcff' }, // 蓝紫
-  { a: '#361310', b: '#ff4d3d', glow: '#ffa59a' }, // 红
-  { a: '#0f2e3d', b: '#00d0ff', glow: '#96efff' } // 天青
+  { a: '#235ca6', b: '#3a7bd5', glow: '#0b1119' }, // 蓝宝石
+  { a: '#177a5e', b: '#22a074', glow: '#0b1119' }, // 祖母绿
+  { a: '#a3264a', b: '#c73460', glow: '#0b1119' }, // 红宝石
+  { a: '#9a6414', b: '#bd8220', glow: '#0b1119' }, // 琥珀
+  { a: '#6a3899', b: '#8850bd', glow: '#0b1119' }, // 紫水晶
+  { a: '#237a9e', b: '#2f9dc4', glow: '#0b1119' }, // 青金石
+  { a: '#8a3661', b: '#a84577', glow: '#0b1119' }, // 石榴石
+  { a: '#5c7a28', b: '#78992f', glow: '#0b1119' } // 橄榄石
 ]
 
 function buildSlices(items) {
@@ -105,7 +105,8 @@ function slicePath(sl) {
 }
 
 function startWheel(items, ms) {
-  wheelSlices.value = buildSlices(items)
+  wheelItems.value = items.slice()
+  nextTick(drawWheel)
   wheelWinner.value = ''
   wheelWinIdx.value = -1
   wheelDur.value = Number(ms) || 4200
@@ -133,6 +134,247 @@ function startWheel(items, ms) {
   }, wheelDur.value + 150)
 }
 
+const wheelCanvas = ref(null)
+const wheelItems = ref([])
+
+const WHEEL_COLORS = ['#ff2d55', '#ff9f0a', '#ffd60a', '#2ee06a', '#00d4d4', '#2f7bff', '#7b5cff', '#ff49c8']
+
+function hex2rgb(h) {
+  const s = h.replace('#', '')
+  return [parseInt(s.slice(0, 2), 16), parseInt(s.slice(2, 4), 16), parseInt(s.slice(4, 6), 16)]
+}
+function mixHex(c1, c2, t) {
+  const a = hex2rgb(c1)
+  const b = hex2rgb(c2)
+  const m = (i) => Math.round(a[i] + (b[i] - a[i]) * t)
+  return 'rgb(' + m(0) + ',' + m(1) + ',' + m(2) + ')'
+}
+
+// 彩色玻璃盘面：宝石色扇区 + 铅条 + 斜向反光 + 金属环，全部画在 canvas 上
+function drawWheel() {
+  const cv = wheelCanvas.value
+  if (!cv) return
+  const ctx = cv.getContext('2d')
+  if (!ctx) return
+  const SIZE = 640
+  const CX = 320
+  const CY = 320
+  const R = 286
+  const RING_R = 296
+  const RING_W = 18
+  const dpr = Math.min(window.devicePixelRatio || 1, 2)
+  if (cv.width !== SIZE * dpr) {
+    cv.width = SIZE * dpr
+    cv.height = SIZE * dpr
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  ctx.clearRect(0, 0, SIZE, SIZE)
+
+  const items = wheelItems.value
+  const n = items.length
+  if (!n) return
+  const step = (Math.PI * 2) / n
+  const start = -Math.PI / 2 - step / 2
+  const win = wheelWinIdx.value
+
+  ctx.beginPath()
+  ctx.arc(CX, CY, R + RING_W + 6, 0, Math.PI * 2)
+  ctx.fillStyle = '#05070d'
+  ctx.fill()
+
+  for (let i = 0; i < n; i++) {
+    const a0 = start + i * step
+    const a1 = a0 + step
+    const col = WHEEL_COLORS[i % WHEEL_COLORS.length]
+    ctx.save()
+    ctx.beginPath()
+    ctx.moveTo(CX, CY)
+    ctx.arc(CX, CY, R, a0, a1)
+    ctx.closePath()
+    ctx.clip()
+
+    const g = ctx.createRadialGradient(CX, CY, R * 0.04, CX, CY, R)
+    g.addColorStop(0, mixHex(col, '#ffffff', 0.62))
+    g.addColorStop(0.4, mixHex(col, '#ffffff', 0.12))
+    g.addColorStop(0.78, col)
+    g.addColorStop(1, mixHex(col, '#000000', 0.25))
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, SIZE, SIZE)
+
+    ctx.globalCompositeOperation = 'overlay'
+    const lg = ctx.createLinearGradient(CX - R, CY - R, CX + R, CY + R)
+    lg.addColorStop(0, 'rgba(255,255,255,0.62)')
+    lg.addColorStop(0.28, 'rgba(255,255,255,0.05)')
+    lg.addColorStop(0.52, 'rgba(0,0,0,0.22)')
+    lg.addColorStop(0.78, 'rgba(255,255,255,0.08)')
+    lg.addColorStop(1, 'rgba(255,255,255,0.28)')
+    ctx.fillStyle = lg
+    ctx.fillRect(0, 0, SIZE, SIZE)
+
+    ctx.globalCompositeOperation = 'source-over'
+    // 镜面高光带：让每块玻璃有厚度
+    ctx.globalCompositeOperation = 'lighter'
+    const midA = a0 + step / 2
+    const hw = Math.sin(step / 2) * R * 0.62
+    ctx.save()
+    ctx.translate(CX, CY)
+    ctx.rotate(midA)
+    const hg = ctx.createLinearGradient(0, -hw, 0, hw)
+    hg.addColorStop(0, 'rgba(255,255,255,0)')
+    hg.addColorStop(0.5, 'rgba(255,255,255,0.22)')
+    hg.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = hg
+    ctx.beginPath()
+    ctx.moveTo(R * 0.06, 0)
+    ctx.lineTo(R * 0.99, -hw * 1.15)
+    ctx.lineTo(R * 0.99, hw * 1.15)
+    ctx.closePath()
+    ctx.fill()
+    ctx.restore()
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.strokeStyle = 'rgba(255,255,255,0.14)'
+    ctx.lineWidth = 1.4
+    for (let k = 0; k < 3; k++) {
+      const s = i * 31 + k * 17 + 3
+      const ra = a0 + step * (0.18 + ((Math.sin(s * 12.9898) * 43758.5453) % 1 + 1) % 1 * 0.64)
+      ctx.beginPath()
+      ctx.moveTo(CX + Math.cos(ra) * R * 0.14, CY + Math.sin(ra) * R * 0.14)
+      ctx.lineTo(CX + Math.cos(ra + 0.08) * R * 0.6, CY + Math.sin(ra + 0.08) * R * 0.6)
+      ctx.lineTo(CX + Math.cos(ra + 0.16) * R * 0.94, CY + Math.sin(ra + 0.16) * R * 0.94)
+      ctx.stroke()
+    }
+
+    // 中奖块：其余压暗后再统一描白边
+    if (win >= 0 && win !== i) {
+      ctx.fillStyle = 'rgba(0,0,0,0.3)'
+      ctx.fillRect(0, 0, SIZE, SIZE)
+    }
+    ctx.restore()
+  }
+
+  // 铅条
+  for (let i = 0; i < n; i++) {
+    const a = start + i * step
+    const cos = Math.cos(a)
+    const sin = Math.sin(a)
+    ctx.beginPath()
+    ctx.moveTo(CX + cos * 26, CY + sin * 26)
+    ctx.lineTo(CX + cos * (R - 2), CY + sin * (R - 2))
+    ctx.lineWidth = 10
+    ctx.strokeStyle = 'rgba(6,9,15,0.94)'
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(CX + cos * 26 - sin * 2.4, CY + sin * 26 + cos * 2.4)
+    ctx.lineTo(CX + cos * (R - 2) - sin * 2.4, CY + sin * (R - 2) + cos * 2.4)
+    ctx.lineWidth = 1.6
+    ctx.strokeStyle = 'rgba(205,222,246,0.18)'
+    ctx.stroke()
+  }
+
+  // 文字：白字 + 黑边，下半圈翻正
+  const fs = n <= 6 ? 34 : n <= 8 ? 30 : n <= 10 ? 25 : n <= 12 ? 21 : 18
+  ctx.font = '800 ' + fs + 'px "Microsoft YaHei", sans-serif'
+  ctx.textBaseline = 'middle'
+  for (let i = 0; i < n; i++) {
+    const mid = start + i * step + step / 2
+    const deg = ((((mid * 180) / Math.PI) % 360) + 360) % 360
+    const flip = deg > 90 && deg < 270
+    let label = String(items[i] || '')
+    if (label.length > 5 && n >= 10) label = label.slice(0, 5) + '…'
+    ctx.save()
+    ctx.translate(CX, CY)
+    ctx.rotate(flip ? mid + Math.PI : mid)
+    ctx.textAlign = flip ? 'left' : 'right'
+    const x = flip ? -(R - 26) : R - 26
+    ctx.lineWidth = 6
+    ctx.lineJoin = 'round'
+    ctx.strokeStyle = '#000000'
+    ctx.strokeText(label, x, 0)
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText(label, x, 0)
+    ctx.restore()
+  }
+
+  // 金属外环
+  ctx.beginPath()
+  ctx.arc(CX, CY, RING_R, 0, Math.PI * 2)
+  ctx.lineWidth = RING_W + 8
+  ctx.strokeStyle = '#05070d'
+  ctx.stroke()
+  const mg = ctx.createLinearGradient(CX - 300, CY - 300, CX + 300, CY + 300)
+  mg.addColorStop(0, '#fff3c4')
+  mg.addColorStop(0.18, '#d8ae52')
+  mg.addColorStop(0.38, '#8a6520')
+  mg.addColorStop(0.55, '#ffeaa8')
+  mg.addColorStop(0.72, '#a97f2e')
+  mg.addColorStop(0.88, '#f0d78e')
+  mg.addColorStop(1, '#6d4c12')
+  ctx.beginPath()
+  ctx.arc(CX, CY, RING_R, 0, Math.PI * 2)
+  ctx.lineWidth = RING_W - 5
+  ctx.strokeStyle = mg
+  ctx.stroke()
+
+  // 环上宝石
+  for (let i = 0; i < n; i++) {
+    const a = start + i * step
+    const x = CX + Math.cos(a) * RING_R
+    const y = CY + Math.sin(a) * RING_R
+    const col = WHEEL_COLORS[i % WHEEL_COLORS.length]
+    const gg = ctx.createRadialGradient(x - 2.6, y - 2.6, 0.5, x, y, 8.5)
+    gg.addColorStop(0, '#ffffff')
+    gg.addColorStop(0.38, col)
+    gg.addColorStop(1, mixHex(col, '#000000', 0.62))
+    ctx.beginPath()
+    ctx.arc(x, y, 7.5, 0, Math.PI * 2)
+    ctx.fillStyle = gg
+    ctx.fill()
+    ctx.lineWidth = 1.6
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)'
+    ctx.stroke()
+  }
+
+  // 整盘玻璃高光
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(CX, CY, R + RING_W / 2 + 2, 0, Math.PI * 2)
+  ctx.clip()
+  ctx.globalCompositeOperation = 'lighter'
+  const gl = ctx.createRadialGradient(CX - R * 0.45, CY - R * 0.52, 0, CX - R * 0.45, CY - R * 0.52, R * 1.5)
+  gl.addColorStop(0, 'rgba(255,255,255,0.40)')
+  gl.addColorStop(0.28, 'rgba(255,255,255,0.12)')
+  gl.addColorStop(0.6, 'rgba(255,255,255,0.02)')
+  gl.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = gl
+  ctx.fillRect(0, 0, SIZE, SIZE)
+  ctx.globalCompositeOperation = 'source-over'
+  const vg = ctx.createRadialGradient(CX, CY, R * 0.5, CX, CY, R + 10)
+  vg.addColorStop(0, 'rgba(0,0,0,0)')
+  vg.addColorStop(0.75, 'rgba(0,0,0,0.08)')
+  vg.addColorStop(1, 'rgba(0,0,0,0.32)')
+  ctx.fillStyle = vg
+  ctx.fillRect(0, 0, SIZE, SIZE)
+  ctx.restore()
+
+  // 中奖块描白边
+  if (win >= 0) {
+    const a0 = start + win * step
+    const a1 = a0 + step
+    ctx.save()
+    ctx.beginPath()
+    ctx.moveTo(CX, CY)
+    ctx.arc(CX, CY, R, a0, a1)
+    ctx.closePath()
+    ctx.lineWidth = 6
+    ctx.strokeStyle = 'rgba(255,255,255,0.95)'
+    ctx.stroke()
+    ctx.restore()
+  }
+}
+
+watch([wheelItems, wheelWinIdx], () => {
+  nextTick(drawWheel)
+})
 // 名字抽奖：从观众名单里抽 1~10 个
 const namePool = ref([])
 const nameWins = ref([])
@@ -546,40 +788,7 @@ function enableAudio() {
     <div v-if="game && game.type === 'wheel'" class="wheel-wrap" :key="'wheel-' + game.started">
       <div class="wheel-title">大转盘</div>
       <div class="wheel-box">
-        <div class="wheel-glow"></div>
-        <!-- 外圈金环 + 灯珠 -->
-        <div class="wheel-rim">
-          <i
-            v-for="n in 24"
-            :key="n"
-            class="bulb"
-            :style="{ transform: 'rotate(' + n * 15 + 'deg) translateY(-258px)', animationDelay: n * 0.07 + 's' }"
-          ></i>
-        </div>
-        <svg viewBox="0 0 520 520" class="wheel-svg">
-          <defs>
-            <linearGradient id="rimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#8ff4ff" />
-              <stop offset="35%" stop-color="#4ac7ff" />
-              <stop offset="70%" stop-color="#c04bff" />
-              <stop offset="100%" stop-color="#ff3d8a" />
-            </linearGradient>
-            <radialGradient id="plateGrad" cx="50%" cy="50%" r="60%">
-              <stop offset="0%" stop-color="#0d1424" />
-              <stop offset="100%" stop-color="#05070e" />
-            </radialGradient>
-            <filter id="rimShadow" x="-25%" y="-25%" width="150%" height="150%">
-              <feDropShadow dx="0" dy="0" stdDeviation="12" flood-color="rgba(80, 200, 255, .55)" />
-              <feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="rgba(0, 0, 0, .6)" />
-            </filter>
-          </defs>
-
-          <!-- 外圈霓虹环 + 内层暗盘，中间留一道暗缝做边界 -->
-          <circle cx="260" cy="260" r="256" fill="url(#rimGrad)" filter="url(#rimShadow)" />
-          <circle cx="260" cy="260" r="246" fill="#03050a" />
-          <circle cx="260" cy="260" r="242" fill="url(#plateGrad)" />
-
-          <g
+          <div
             class="wheel-rotor"
             :style="{
               transform: 'rotate(' + wheelRot + 'deg)',
@@ -587,56 +796,10 @@ function enableAudio() {
               transitionTimingFunction: 'cubic-bezier(.12,.72,.16,1)'
             }"
           >
-            <g v-for="sl in wheelSlices" :key="sl.i">
-              <radialGradient :id="'sg' + sl.i" gradientUnits="userSpaceOnUse" cx="260" cy="260" r="252">
-                <stop offset="0%" :stop-color="sl.from" />
-                <stop offset="55%" :stop-color="sl.from" />
-                <stop offset="100%" :stop-color="sl.to" />
-              </radialGradient>
-              <path
-                :d="slicePath(sl)"
-                :fill="'url(#sg' + sl.i + ')'"
-                :stroke="sl.glow"
-                stroke-width="2"
-                class="slice"
-                :class="{ lit: wheelWinIdx === sl.i, dim: wheelWinIdx >= 0 && wheelWinIdx !== sl.i }"
-                :style="{ filter: 'drop-shadow(0 0 10px ' + sl.glow + ')' + (wheelWinIdx === sl.i ? ' brightness(1.4) saturate(1.3)' : '') }"
-              />
-            </g>
-
-            <!-- 中奖块的高亮闪动覆盖层 -->
-            <path
-              v-for="sl in wheelSlices"
-              :key="'w' + sl.i"
-              v-show="wheelWinIdx === sl.i"
-              :d="slicePath(sl)"
-              class="win-flash"
-              :style="{ stroke: sl.glow }"
-            />
-
-            <!-- 文字：沿半径方向，从外向内读 -->
-            <g v-for="sl in wheelSlices" :key="'t' + sl.i" :transform="'translate(260 260) rotate(' + sl.labelRot + ')'">
-              <text
-                v-for="(line, li) in sl.lines"
-                :key="li"
-                :x="sl.labelX"
-                :y="sl.lines.length > 1 ? (li === 0 ? -10 : 22) : 9"
-                :text-anchor="sl.labelAnchor"
-                class="wheel-label"
-                :class="{ lit: wheelWinIdx === sl.i }"
-                :style="{ fontSize: sl.fontSize + 'px' }"
-              >{{ line }}</text>
-            </g>
-          </g>
-
-          <circle cx="260" cy="260" r="54" fill="url(#rimGrad)" opacity="0.95" />
-          <circle cx="260" cy="260" r="46" fill="#05070e" stroke="#7de9ff" stroke-width="2" />
-          <circle cx="260" cy="260" r="38" fill="none" stroke="rgba(125, 233, 255, 0.35)" stroke-width="1" />
-          <text x="260" y="268" text-anchor="middle" class="hub-text">开转</text>
-        </svg>
-        <div class="wheel-scan"></div>
-        <div class="wheel-pointer"></div>
-      </div>
+            <canvas ref="wheelCanvas" class="wheel-canvas" width="640" height="640"></canvas>
+          </div>
+          <div class="wheel-hub">开转</div>
+          <div class="wheel-pointer"></div>      </div>
       <div v-if="wheelWinner" class="wheel-win">🎉 {{ wheelWinner }}</div>
     </div>
 
@@ -829,14 +992,16 @@ function enableAudio() {
   justify-content: center;
 }
 .wheel-glow {
+  display: none;
   position: absolute;
   inset: -14px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(255, 190, 80, 0.30) 0%, rgba(190, 40, 20, 0.18) 52%, rgba(0, 0, 0, 0) 72%);
-  filter: blur(18px);
+  filter: none;
   animation: wheelGlow 2.2s ease-in-out infinite;
 }
 .wheel-rim {
+  display: none;
   position: absolute;
   inset: 0;
   border-radius: 50%;
@@ -851,17 +1016,42 @@ function enableAudio() {
   margin: -4.5px 0 0 -4.5px;
   border-radius: 50%;
   background: #bff6ff;
-  box-shadow: 0 0 10px 3px rgba(90, 220, 255, 0.9);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
   animation: twinkle 1.05s ease-in-out infinite alternate;
 }
 .wheel-svg {
   width: 520px;
   height: 520px;
   display: block;
-  filter: drop-shadow(0 18px 46px rgba(0, 0, 0, 0.55));
+  filter: none;
+}
+.wheel-canvas {
+  width: 520px;
+  height: 520px;
+  display: block;
+  border-radius: 50%;
+}
+.wheel-hub {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 96px;
+  height: 96px;
+  margin: -48px 0 0 -48px;
+  border-radius: 50%;
+  background: #05070e;
+  border: 2px solid #4a5763;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #dfe8f2;
+  font-family: 'Microsoft YaHei', sans-serif;
+  font-weight: 800;
+  font-size: 22px;
+  z-index: 3;
 }
 .wheel-rotor {
-  transform-origin: 260px 260px;
+  transform-origin: 50% 50%;
   transition-property: transform;
   will-change: transform;
 }
@@ -886,19 +1076,19 @@ function enableAudio() {
   position: absolute;
   left: 50%;
   top: -10px;
-  margin-left: -16px;
+  transform: translateX(-50%);
   width: 0;
   height: 0;
   border-left: 16px solid transparent;
   border-right: 16px solid transparent;
-  border-top: 42px solid #7de9ff;
-  filter: drop-shadow(0 0 10px rgba(90, 220, 255, 0.95)) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.7));
+  border-top: 42px solid #dfe8f2;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.7));
   z-index: 3;
   animation: pointerPulse 1.5s ease-in-out infinite;
 }
 @keyframes pointerPulse {
-  0%, 100% { filter: drop-shadow(0 0 8px rgba(90, 220, 255, 0.8)) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.7)); }
-  50% { filter: drop-shadow(0 0 18px rgba(120, 235, 255, 1)) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.7)); }
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(-4px); }
 }
 .slice {
   transition: opacity 0.35s ease;
@@ -907,6 +1097,7 @@ function enableAudio() {
   opacity: 0.5;
 }
 .wheel-scan {
+  display: none;
   position: absolute;
   inset: 6px;
   border-radius: 50%;
@@ -1031,7 +1222,7 @@ function enableAudio() {
   font-size: 24px;
   font-weight: 800;
   letter-spacing: 1px;
-  box-shadow: 0 0 26px rgba(90, 220, 255, 0.55);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
   animation: pop 0.4s cubic-bezier(0.2, 1.4, 0.4, 1) both;
 }
 @keyframes twinkle {
@@ -1084,7 +1275,7 @@ function enableAudio() {
 }
 .guess-win { font-size: 40px; font-weight: 900; color: #fff; }
 .gw-name { color: #ffd24a; font-size: 48px; }
-.gw-text { margin-top: 6px; }
+.gw-text { margin-top: 6px; text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0 4px 12px rgba(0, 0, 0, 0.85); }
 
 .guess-hint {
   margin-top: 10px;
@@ -1134,7 +1325,7 @@ function enableAudio() {
   border: 3px solid #ff4d5e;
   border-radius: 20px;
   padding: 26px 54px;
-  box-shadow: 0 0 60px rgba(255, 60, 80, 0.55);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
 }
 .traitor-tag {
   font-size: 20px;
@@ -1147,7 +1338,7 @@ function enableAudio() {
   font-weight: 900;
   color: #fff;
   margin: 6px 0;
-  text-shadow: 0 0 26px rgba(255, 80, 100, 0.9);
+  text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000;
 }
 .traitor-reason {
   font-size: 20px;
