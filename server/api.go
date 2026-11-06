@@ -14,22 +14,22 @@ func (a *App) registerAPI(mux *http.ServeMux) {
 	// 一次性把所有初始数据给控制台，避免首屏多次请求
 	mux.HandleFunc("/api/bootstrap", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{
-			"config":     a.cfg.Get(),
-			"rules":      a.rules.List(),
-			"modules":    a.mods.List(),
-			"categories": a.mods.Categories(),
-			"stats":      a.store.Snapshot(),
-			"events":     a.store.Recent(60),
-			"traces":     a.TraceList(60),
-			"fans":       a.store.Fans(),
-			"gifts":      a.gifts.List(),
-			"scripts":    a.scripts.List(),
+			"config":           a.cfg.Get(),
+			"rules":            a.rules.List(),
+			"modules":          a.mods.List(),
+			"categories":       a.mods.Categories(),
+			"stats":            a.store.Snapshot(),
+			"events":           a.store.Recent(60),
+			"traces":           a.TraceList(60),
+			"fans":             a.store.Fans(),
+			"gifts":            a.gifts.List(),
+			"scripts":          a.scripts.List(),
 			"scriptCategories": scriptCategories,
-			"products":   a.products.List(),
-			"modes":      liveModes,
-			"mode":       a.cfg.Get().Mode,
-			"sfx":        a.sfxList(),
-			"voices":     listVoices(),
+			"products":         a.products.List(),
+			"modes":            liveModes,
+			"mode":             a.cfg.Get().Mode,
+			"sfx":              a.sfxList(),
+			"voices":           listVoices(),
 			"info": map[string]any{
 				"root":      a.root,
 				"dataDir":   a.dataDir,
@@ -60,9 +60,9 @@ func (a *App) registerAPI(mux *http.ServeMux) {
 
 	mux.HandleFunc("/api/game/wheel", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			Theme  string   `json:"theme"`
-			Items  []string `json:"items"`
-			Speed  int      `json:"speed"`
+			Theme string   `json:"theme"`
+			Items []string `json:"items"`
+			Speed int      `json:"speed"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		v := a.StartWheel(body.Theme, body.Items, body.Speed)
@@ -256,7 +256,16 @@ func (a *App) registerAPI(mux *http.ServeMux) {
 			sb.WriteString(itoa(i+1) + ". " + s.Title + "：" + s.Text + "\n")
 		}
 		sb.WriteString("请基于这些参考，结合我描述的场景，输出一句（最多 2 句）可以直接念出来的中文口播，不要解释、不要编号。")
-		reply, err := a.llm.ChatWith(q, sb.String())
+		// 用的哪套人设：跟当前定位一致就用当前定位；在别的场景里临时问，就按那个内容场景换
+		mode := a.cfg.Get().Mode
+		if body.Scene != "" && body.Scene != ModeScene(mode) {
+			if body.Scene == "fun" {
+				mode = "fun"
+			} else if body.Scene == "ecom" {
+				mode = "ecom"
+			}
+		}
+		reply, err := a.llm.ChatMode(mode, q, sb.String())
 		if err != nil {
 			writeJSON(w, 200, map[string]any{"ok": false, "error": err.Error(), "refs": refs})
 			return
@@ -305,7 +314,11 @@ func (a *App) registerAPI(mux *http.ServeMux) {
 			"2) 口语、像朋友推荐，2~4 句，不要夸张承诺、不要绝对化用语（最、第一、绝对）\n" +
 			"3) 一定要提一句谁不适合买，帮他省钱\n" +
 			"4) 直接给口播正文，不要标题、不要解释\n\n" + prod.Brief()
-		reply, err := a.llm.ChatWith(prompt, "")
+		pitchMode := "ecom"
+		if strings.HasPrefix(a.cfg.Get().Mode, "ecom") {
+			pitchMode = a.cfg.Get().Mode
+		}
+		reply, err := a.llm.ChatMode(pitchMode, prompt, "")
 		if err != nil {
 			writeJSON(w, 200, map[string]any{"ok": false, "error": err.Error()})
 			return
@@ -517,16 +530,16 @@ func (a *App) registerAPI(mux *http.ServeMux) {
 	// 模拟推送（调试台核心）
 	mux.HandleFunc("/api/simulate", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			Raw  map[string]any `json:"raw"`
-			Type string         `json:"type"`
-			User string         `json:"user"`
-			Text string         `json:"text"`
-			Gift string         `json:"giftName"`
-			Count int           `json:"giftCount"`
-			Value float64       `json:"giftValue"`
-			Level int           `json:"level"`
-			GuardLevel int      `json:"guardLevel"`
-			FansClubLevel int   `json:"fansClubLevel"`
+			Raw           map[string]any `json:"raw"`
+			Type          string         `json:"type"`
+			User          string         `json:"user"`
+			Text          string         `json:"text"`
+			Gift          string         `json:"giftName"`
+			Count         int            `json:"giftCount"`
+			Value         float64        `json:"giftValue"`
+			Level         int            `json:"level"`
+			GuardLevel    int            `json:"guardLevel"`
+			FansClubLevel int            `json:"fansClubLevel"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeJSON(w, 400, map[string]any{"ok": false, "msg": err.Error()})
@@ -734,7 +747,7 @@ func (a *App) testModule(m Module) (string, error) {
 		return fmt.Sprintf("累计合并 %d 次，节省 %d 次派发", st["merged"], st["saved"]), nil
 	default:
 		if !m.Ready {
-		return "", fmt.Errorf("该模块尚未实现（路线图上）")
+			return "", fmt.Errorf("该模块尚未实现（路线图上）")
 		}
 		return "无需测试", nil
 	}

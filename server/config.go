@@ -18,13 +18,37 @@ type TTSConfig struct {
 
 // LLMConfig OpenAI 兼容接口配置（火山方舟/DeepSeek/Ollama 均可）
 type LLMConfig struct {
-	Enabled     bool    `json:"enabled"`
-	BaseURL     string  `json:"baseUrl"`
-	APIKey      string  `json:"apiKey"`
-	Model       string  `json:"model"`
-	System      string  `json:"system"`
-	TimeoutMS   int     `json:"timeoutMs"`
-	Temperature float64 `json:"temperature"`
+	Enabled     bool              `json:"enabled"`
+	BaseURL     string            `json:"baseUrl"`
+	APIKey      string            `json:"apiKey"`
+	Model       string            `json:"model"`
+	System      string            `json:"system"`  // 通用兜底人设（没配场景人设时用）
+	Prompts     map[string]string `json:"prompts"` // 按直播定位分开的人设：fun / fun_auto / ecom / ecom_auto
+	TimeoutMS   int               `json:"timeoutMs"`
+	Temperature float64           `json:"temperature"`
+}
+
+// defaultPrompts 四种直播定位各一套人设：娱乐要梗、无人娱乐要接话不断场、电商要讲品、无人电商要循环安利
+func defaultPrompts() map[string]string {
+	return map[string]string{
+		"fun":       "你是娱乐直播间主播的场控助理。用一句不超过30字的中文口语回观众，亲切有梗、可以自嘲整活；不要解释、不要加引号、不要emoji、不要喊口号。",
+		"fun_auto":  "你在替一位不在镜头前的主播看场。直播间主要做游戏和聊天：回答观众要短、口语，主动把话题引到转盘 / 猜数字 / 名字抽奖上，别让场子冷下来；不要解释、不要emoji、不要暴露直播间没人。",
+		"ecom":      "你是电商直播间的助播。回答围绕商品：讲卖点、算账、说清适合谁不适合谁；不许编造参数 / 价格 / 库存，不许用「最」「第一」「绝对」这类词；一句不超过40字，口语、不催单焦虑。",
+		"ecom_auto": "你在替一位不在镜头前的带货主播循环讲品。围绕主推商品反复讲清卖点、适合谁、不适合谁；不许编造参数和优惠，不许承诺价格，不许用绝对化词；每句不超过40字，像店员慢慢介绍，不逼单。",
+	}
+}
+
+// PromptFor 取当前直播定位的人设；没配就用通用兜底
+func (l LLMConfig) PromptFor(mode string) string {
+	if l.Prompts != nil {
+		if p := l.Prompts[mode]; p != "" {
+			return p
+		}
+	}
+	if l.System != "" {
+		return l.System
+	}
+	return defaultPrompts()["fun"]
 }
 
 // LiveMode 直播定位：两个轴——讲什么（娱乐/电商）× 有没有人（真人在/无人值守），组合成四种
@@ -45,7 +69,7 @@ var liveModes = []LiveMode{
 		ID:     "fun",
 		Short:  "娱乐",
 		Name:   "娱乐直播（真人在）",
-	Desc:   "你本人在镜头前，场控替你看弹幕、接礼物、救冷场",
+		Desc:   "你本人在镜头前，场控替你看弹幕、接礼物、救冷场",
 		Focus:  "礼物感谢要快、冷场要有人接话、整活要跟得上",
 		Script: "keep",
 		Scene:  "fun",
@@ -120,16 +144,15 @@ func ModeScene(mode string) string {
 	return ""
 }
 
-
 // WelcomeConfig 进场欢迎门槛：三项可分别开关（只欢迎高等级 / 高粉丝团 / 高消费，任意一项达标就欢迎）
 type WelcomeConfig struct {
-	Enabled   bool    `json:"enabled"`   // 总开关：关=所有人都欢迎
-	LevelOn   bool    `json:"levelOn"`   // 看账号等级
-	FansOn    bool    `json:"fansOn"`    // 看粉丝团等级
-	ValueOn   bool    `json:"valueOn"`   // 看累计消费
-	MinLevel  int     `json:"minLevel"`  // 账号等级 ≥
-	MinFans   int     `json:"minFans"`   // 粉丝团等级 ≥
-	MinValue  float64 `json:"minValue"`  // 累计消费抖币 ≥
+	Enabled  bool    `json:"enabled"`  // 总开关：关=所有人都欢迎
+	LevelOn  bool    `json:"levelOn"`  // 看账号等级
+	FansOn   bool    `json:"fansOn"`   // 看粉丝团等级
+	ValueOn  bool    `json:"valueOn"`  // 看累计消费
+	MinLevel int     `json:"minLevel"` // 账号等级 ≥
+	MinFans  int     `json:"minFans"`  // 粉丝团等级 ≥
+	MinValue float64 `json:"minValue"` // 累计消费抖币 ≥
 }
 
 // Config 全局配置
@@ -142,7 +165,7 @@ type Config struct {
 	LLM         LLMConfig           `json:"llm"`
 	Mapping     map[string][]string `json:"mapping"`     // 字段映射：逻辑字段 -> 候选路径
 	TypeAliases map[string][]string `json:"typeAliases"` // 事件类型别名
-	Welcome     WelcomeConfig       `json:"welcome"`      // 进场欢迎门槛
+	Welcome     WelcomeConfig       `json:"welcome"`     // 进场欢迎门槛
 }
 
 func defaultConfig() Config {
@@ -162,22 +185,23 @@ func defaultConfig() Config {
 			BaseURL:     "https://ark.cn-beijing.volces.com/api/v3",
 			Model:       "",
 			System:      "你是直播间主播的场控助理。用一句不超过30字的中文口语回复观众，语气亲切有梗，不要解释、不要加引号、不要emoji。",
+			Prompts:     defaultPrompts(),
 			TimeoutMS:   2500,
 			Temperature: 0.7,
 		},
 		Mapping: map[string][]string{
-			"type":      {"type", "Type", "msg_type", "msgType", "cmd", "event", "Category"},
-			"user":      {"user", "User", "nickname", "nickName", "nick_name", "uname", "userName", "user_name", "data.user.nickname", "Data.User.NickName"},
-			"userId":    {"userId", "user_id", "uid", "sec_uid", "openid", "data.user.id", "Data.User.Id"},
-			"avatar":    {"avatar", "Avatar", "head_img", "headImg", "avatar_url", "data.user.avatar", "Data.User.Avatar"},
-			"level":     {"level", "Level", "user_level", "userLevel", "data.user.level"},
-			"text":      {"text", "Text", "content", "Content", "msg", "danmaku", "message", "data.content", "Data.Content"},
-			"giftName":  {"giftName", "gift_name", "gift", "GiftName", "giftNameStr", "data.gift.name", "Data.Gift.Name"},
-			"giftCount": {"giftCount", "gift_count", "count", "num", "repeat", "repeatCount", "data.gift.count", "Data.Gift.RepeatCount"},
-			"giftValue": {"giftValue", "gift_value", "price", "diamond", "diamondCount", "data.gift.diamond", "Data.Gift.DiamondCount"},
-			"guardLevel": {"guardLevel", "guard_level", "guardType", "data.guard.level", "Data.User.FansClubInfo.Data.GuardLevel"},
+			"type":          {"type", "Type", "msg_type", "msgType", "cmd", "event", "Category"},
+			"user":          {"user", "User", "nickname", "nickName", "nick_name", "uname", "userName", "user_name", "data.user.nickname", "Data.User.NickName"},
+			"userId":        {"userId", "user_id", "uid", "sec_uid", "openid", "data.user.id", "Data.User.Id"},
+			"avatar":        {"avatar", "Avatar", "head_img", "headImg", "avatar_url", "data.user.avatar", "Data.User.Avatar"},
+			"level":         {"level", "Level", "user_level", "userLevel", "data.user.level"},
+			"text":          {"text", "Text", "content", "Content", "msg", "danmaku", "message", "data.content", "Data.Content"},
+			"giftName":      {"giftName", "gift_name", "gift", "GiftName", "giftNameStr", "data.gift.name", "Data.Gift.Name"},
+			"giftCount":     {"giftCount", "gift_count", "count", "num", "repeat", "repeatCount", "data.gift.count", "Data.Gift.RepeatCount"},
+			"giftValue":     {"giftValue", "gift_value", "price", "diamond", "diamondCount", "data.gift.diamond", "Data.Gift.DiamondCount"},
+			"guardLevel":    {"guardLevel", "guard_level", "guardType", "data.guard.level", "Data.User.FansClubInfo.Data.GuardLevel"},
 			"fansClubLevel": {"fansClubLevel", "fansclub_level", "fansClubLevelInt", "fanClubLevel", "fansLevel", "data.user.fansClubInfo.level", "Data.User.FansClubInfo.Level"},
-			"ts":        {"ts", "TS", "timestamp", "time", "createTime", "data.ts"},
+			"ts":            {"ts", "TS", "timestamp", "time", "createTime", "data.ts"},
 		},
 		TypeAliases: map[string][]string{
 			"danmaku":  {"danmaku", "chat", "comment", "message", "弹幕", "1", "WebcastChatMessage"},
@@ -276,6 +300,15 @@ func loadConfig(dir string) *ConfigStore {
 	if c.LLM.System == "" {
 		c.LLM.System = def.LLM.System
 	}
+	// 老配置没有分场景人设：逐键补默认，保证切换定位就有对应话风
+	if c.LLM.Prompts == nil {
+		c.LLM.Prompts = map[string]string{}
+	}
+	for k, v := range def.LLM.Prompts {
+		if c.LLM.Prompts[k] == "" {
+			c.LLM.Prompts[k] = v
+		}
+	}
 	cs.cfg = c
 	if legacyPlain {
 		// 明文迁移：加密写入 secret.dat，同时把 config.json 里的 apiKey 清空
@@ -302,6 +335,16 @@ func (cs *ConfigStore) Set(c Config) error {
 	// 前端拿不到明文 Key：空值表示「沿用已保存的那把」，不能把它当成清空
 	if c.LLM.APIKey == "" {
 		c.LLM.APIKey = cs.cfg.LLM.APIKey
+	}
+	// 前端如果只回传部分场景人设（或老页面根本没带 prompts），别把其它场景的人设冲掉
+	if c.LLM.Prompts == nil {
+		c.LLM.Prompts = cs.cfg.LLM.Prompts
+	} else {
+		for k, v := range cs.cfg.LLM.Prompts {
+			if _, ok := c.LLM.Prompts[k]; !ok {
+				c.LLM.Prompts[k] = v
+			}
+		}
 	}
 	cs.cfg = c
 	cs.mu.Unlock()

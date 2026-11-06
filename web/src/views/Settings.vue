@@ -14,6 +14,13 @@ const aiMsg = ref('')
 const busy = ref(false)
 const showAdvanced = ref(false)
 const showSystem = ref(false)
+const promptMode = ref(props.data.mode || 'fun')
+const promptModes = [
+  { id: 'fun', name: '娱乐', hint: '真人在播：AI 回弹幕要短、有点、能整活' },
+  { id: 'fun_auto', name: '无人娱乐', hint: '人不在：AI 主动接话、往游戏和聊天上引，别让场子冷' },
+  { id: 'ecom', name: '电商', hint: '真人在卖：AI 当助播，讲卖点、算账、帮避坑' },
+  { id: 'ecom_auto', name: '无人电商', hint: '人不在卖：AI 循环安利主推，慢慢介绍、不逼单' }
+]
 const keySaved = ref(false)
 
 // 一次只显示一件事：先选要调什么，再出对应配置
@@ -82,6 +89,7 @@ async function probe() {
 
 onMounted(async () => {
   if (!cfg.value.llm) cfg.value.llm = {}
+  if (!cfg.value.llm.prompts) cfg.value.llm.prompts = {}
   if (!cfg.value.tts) cfg.value.tts = {}
   if (!cfg.value.tts.rate) cfg.value.tts.rate = 0
   if (!cfg.value.tts.volume) cfg.value.tts.volume = 90
@@ -195,11 +203,28 @@ function setTtsMode(m) {
     </div>
 
     <div style="margin-top: 14px">
-      <button class="btn sm ghost" @click="showSystem = !showSystem">
-        {{ showSystem ? '收起人设' : 'AI 的人设与红线（新手不用改）' }}
-      </button>
-      <div v-if="showSystem" style="margin-top: 8px">
-        <textarea v-model="cfg.llm.system" rows="5"></textarea>
+      <div class="row" style="margin-bottom: 8px">
+        <b style="flex: 1">AI 的人设（按直播定位分开，切过去自动换）</b>
+        <button class="btn sm ghost" @click="showSystem = !showSystem">{{ showSystem ? '收起' : '怎么改' }}</button>
+      </div>
+      <div class="row" style="gap: 6px; flex-wrap: wrap; margin-bottom: 8px">
+        <button
+          v-for="m in promptModes"
+          :key="m.id"
+          class="btn sm"
+          :class="promptMode === m.id ? 'primary' : 'ghost'"
+          @click="promptMode = m.id"
+        >
+          {{ m.name }}
+        </button>
+      </div>
+      <div class="small muted" style="margin-bottom: 6px">
+        {{ promptModes.find((m) => m.id === promptMode)?.hint }}。这段是 AI 的「性格和红线」，写清楚它该怎么说、绝不能说什么；改完自动保存。
+      </div>
+      <textarea v-model="cfg.llm.prompts[promptMode]" rows="6" placeholder="写这个场景下 AI 该怎么说话"></textarea>
+      <div v-if="showSystem" class="small muted" style="margin-top: 8px">
+        四个场景都有自己一套，互不覆盖。下面这个「通用兜底」只在某个场景没写任何内容时用：
+        <textarea v-model="cfg.llm.system" rows="3" style="margin-top: 6px"></textarea>
       </div>
     </div>
   </div>

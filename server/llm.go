@@ -52,6 +52,20 @@ func (c *LLMClient) ChatWith(userMsg, extraSystem string) (string, error) {
 
 // ChatWithTimeout 同上，但可以压一个更短的超时（直播里等 8 秒太久）
 func (c *LLMClient) ChatWithTimeout(userMsg, extraSystem string, maxWait time.Duration) (string, error) {
+	return c.chatWithMode("", userMsg, extraSystem, maxWait)
+}
+
+// ChatMode 按当前直播定位换人设（娱乐 / 无人娱乐 / 电商 / 无人电商 各一套）
+func (c *LLMClient) ChatMode(mode, userMsg, extraSystem string) (string, error) {
+	return c.chatWithMode(mode, userMsg, extraSystem, 0)
+}
+
+// ChatModeTimeout 带超时的分场景版本
+func (c *LLMClient) ChatModeTimeout(mode, userMsg, extraSystem string, maxWait time.Duration) (string, error) {
+	return c.chatWithMode(mode, userMsg, extraSystem, maxWait)
+}
+
+func (c *LLMClient) chatWithMode(mode, userMsg, extraSystem string, maxWait time.Duration) (string, error) {
 	cfg := c.get()
 	if !cfg.Enabled {
 		return "", errors.New("LLM 未启用（功能中心 → 话术 AI 里打开）")
@@ -60,6 +74,9 @@ func (c *LLMClient) ChatWithTimeout(userMsg, extraSystem string, maxWait time.Du
 		return "", errors.New("LLM 缺少 BaseURL 或 Model")
 	}
 	system := cfg.System
+	if mode != "" {
+		system = cfg.PromptFor(mode)
+	}
 	if strings.TrimSpace(extraSystem) != "" {
 		system += "\n\n" + extraSystem
 	}
@@ -275,4 +292,3 @@ func explainHTTP(code int, raw string) string {
 	}
 	return "请求失败（HTTP " + itoa(code) + "）：" + truncate(raw, 120)
 }
-

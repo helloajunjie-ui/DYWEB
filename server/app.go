@@ -16,22 +16,22 @@ import (
 
 // App 装配体
 type App struct {
-	cfg     *ConfigStore
-	rules   *RulesStore
-	store   *Store
-	hub     *Hub
-	tts     *TTS
-	mods    *ModuleStore
-	merger  *Merger
-	llm     *LLMClient
-	gifts   *GiftStore
-	scripts *ScriptStore
+	cfg      *ConfigStore
+	rules    *RulesStore
+	store    *Store
+	hub      *Hub
+	tts      *TTS
+	mods     *ModuleStore
+	merger   *Merger
+	llm      *LLMClient
+	gifts    *GiftStore
+	scripts  *ScriptStore
 	products *ProductStore
-	game    *GameEngine
-	root    string
-	dataDir string
-	sfxDir  string
-	started int64
+	game     *GameEngine
+	root     string
+	dataDir  string
+	sfxDir   string
+	started  int64
 
 	traceMu sync.Mutex
 	traces  []Trace
@@ -79,20 +79,20 @@ func newApp(root string) *App {
 	_ = os.MkdirAll(sfxDir, 0o755)
 
 	a := &App{
-		cfg:     loadConfig(dataDir),
-		rules:   newRulesStore(dataDir),
-		store:   newStore(dataDir),
-		hub:     newHub(),
-		mods:    newModuleStore(dataDir),
-		gifts:   newGiftStore(dataDir),
-		scripts: newScriptStore(dataDir),
+		cfg:      loadConfig(dataDir),
+		rules:    newRulesStore(dataDir),
+		store:    newStore(dataDir),
+		hub:      newHub(),
+		mods:     newModuleStore(dataDir),
+		gifts:    newGiftStore(dataDir),
+		scripts:  newScriptStore(dataDir),
 		products: newProductStore(dataDir),
-		game:    newGameEngine(),
-		llm:     nil,
-		root:    root,
-		dataDir: dataDir,
-		sfxDir:  sfxDir,
-		started: time.Now().UnixMilli(),
+		game:     newGameEngine(),
+		llm:      nil,
+		root:     root,
+		dataDir:  dataDir,
+		sfxDir:   sfxDir,
+		started:  time.Now().UnixMilli(),
 	}
 	a.llm = newLLMClient(func() LLMConfig { return a.cfg.Get().LLM })
 	a.tts = newTTS(func() TTSConfig { return a.cfg.Get().TTS }, a.dataDir)
@@ -280,7 +280,7 @@ func (a *App) performAction(rule Rule, act Action, ev Event, combo int) (string,
 				sb.WriteString(p.Brief())
 				sb.WriteString("\n")
 			}
-			text, err := a.llm.ChatWith(prompt, sb.String())
+			text, err := a.llm.ChatMode(a.cfg.Get().Mode, prompt, sb.String())
 			if err != nil {
 				a.trace(rule, act, ev, false, err.Error())
 				return

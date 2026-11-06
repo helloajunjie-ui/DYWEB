@@ -105,10 +105,10 @@ func defaultScripts() []Script {
 
 // ScriptStore 内置话术 + 主播自己加的话术 + 对内置话术的覆盖修改
 type ScriptStore struct {
-	mu     sync.Mutex
-	custom []Script
-	edits  map[string]Script // 内置话术 ID → 改过的版本
-	path   string
+	mu       sync.Mutex
+	custom   []Script
+	edits    map[string]Script // 内置话术 ID → 改过的版本
+	path     string
 	editPath string
 }
 
