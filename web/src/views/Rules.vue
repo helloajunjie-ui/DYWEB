@@ -10,7 +10,7 @@ const editing = ref(null) // 索引
 const message = ref('')
 const advanced = ref(false)
 const editText = ref('')
-const welcome = ref({ enabled: false, minLevel: 0, minFans: 0, minValue: 0 })
+const welcome = ref({ enabled: false, levelOn: false, fansOn: false, valueOn: false, minLevel: 30, minFans: 5, minValue: 100 })
 
 async function loadWelcome() {
   try {
@@ -222,18 +222,29 @@ const matchLabel = (r) => {
       <label class="switch"><input type="checkbox" v-model="welcome.enabled" /><i></i></label>
     </div>
     <div class="small muted" style="margin: 6px 0 0">
-      开着 → 只欢迎下面任意一项达标的人；关掉 → 谁进来都欢迎（默认关）。
+      开着 → 只欢迎下面「开了的那几项」达标的人（可以只开一项，比如只欢迎高等级）；关掉 → 谁进来都欢迎（默认关）。
     </div>
-    <div v-if="welcome.enabled" class="wrap" style="margin-top: 12px">
-      <span>账号等级 ≥</span>
-      <input v-model.number="welcome.minLevel" type="number" min="0" style="width: 80px" />
-      <span>粉丝团等级 ≥</span>
-      <input v-model.number="welcome.minFans" type="number" min="0" style="width: 80px" />
-      <span>累计消费 ≥</span>
-      <input v-model.number="welcome.minValue" type="number" min="0" style="width: 100px" />
-      <span class="small muted">抖币</span>
+    <div v-if="welcome.enabled" class="col" style="margin-top: 12px; gap: 8px">
+      <div class="row">
+        <label class="switch"><input type="checkbox" v-model="welcome.levelOn" /><i></i></label>
+        <span style="width: 190px">高等级：账号等级 ≥</span>
+        <input v-model.number="welcome.minLevel" type="number" min="0" style="width: 80px" :disabled="!welcome.levelOn" />
+      </div>
+      <div class="row">
+        <label class="switch"><input type="checkbox" v-model="welcome.fansOn" /><i></i></label>
+        <span style="width: 190px">高粉丝团：粉丝团等级 ≥</span>
+        <input v-model.number="welcome.minFans" type="number" min="0" style="width: 80px" :disabled="!welcome.fansOn" />
+      </div>
+      <div class="row">
+        <label class="switch"><input type="checkbox" v-model="welcome.valueOn" /><i></i></label>
+        <span style="width: 190px">高消费：累计消费 ≥</span>
+        <input v-model.number="welcome.minValue" type="number" min="0" style="width: 100px" :disabled="!welcome.valueOn" />
+        <span class="small muted">抖币</span>
+      </div>
     </div>
-    <div v-if="welcome.enabled" class="small muted" style="margin-top: 6px">填 0 = 这一项不限；三项满足任意一项就算「值得欢迎」。</div>
+    <div v-if="welcome.enabled" class="small muted" style="margin-top: 8px">
+      任意一项达标就欢迎；三项都关 = 谁都欢迎。不达标的人进场不播报，调试台会记一条“未达欢迎门槛”。
+    </div>
     <div class="row" style="margin-top: 10px">
       <button class="btn primary" @click="saveWelcome">保存欢迎门槛</button>
     </div>

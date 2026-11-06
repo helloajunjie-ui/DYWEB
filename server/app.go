@@ -137,14 +137,18 @@ func (a *App) HandleEvent(ev Event) Event {
 		return ev
 	}
 	if cfg.Welcome.Enabled && ev.Type == "enter" {
-		// 只欢迎「高等级 / 高粉丝团 / 高消费」，门槛由主播设；关掉门槛就是谁都欢迎
-		f, ok := a.store.FanOf(ev.User, ev.UserID)
-		hit := ok && ((cfg.Welcome.MinLevel > 0 && f.Level >= cfg.Welcome.MinLevel) ||
-			(cfg.Welcome.MinFans > 0 && f.FansClubLevel >= cfg.Welcome.MinFans) ||
-			(cfg.Welcome.MinValue > 0 && f.GiftValue >= cfg.Welcome.MinValue))
-		if !hit {
-			a.addTrace(Trace{TS: time.Now().UnixMilli(), Rule: "欢迎门槛", Action: "skip", OK: true, User: ev.User, EventID: ev.ID, Msg: "未达欢迎门槛，跳过欢迎"})
-			return ev
+		// 三项门槛可分别开：只开哪项就只看哪项，任意一项达标就欢迎；一项都没开=谁都欢迎
+		w := cfg.Welcome
+		any := w.LevelOn || w.FansOn || w.ValueOn
+		if any {
+			f, ok := a.store.FanOf(ev.User, ev.UserID)
+			hit := ok && ((w.LevelOn && f.Level >= w.MinLevel) ||
+				(w.FansOn && f.FansClubLevel >= w.MinFans) ||
+				(w.ValueOn && f.GiftValue >= w.MinValue))
+			if !hit {
+				a.addTrace(Trace{TS: time.Now().UnixMilli(), Rule: "欢迎门槛", Action: "skip", OK: true, User: ev.User, EventID: ev.ID, Msg: "未达欢迎门槛，跳过欢迎"})
+				return ev
+			}
 		}
 	}
 	for _, h := range a.rules.Eval(&ev) {

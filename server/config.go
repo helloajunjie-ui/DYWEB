@@ -84,12 +84,15 @@ var liveModes = []LiveMode{
 	},
 }
 
-// WelcomeConfig 进场欢迎门槛：只欢迎「高等级 / 高粉丝团 / 高消费」的人，门槛由主播设
+// WelcomeConfig 进场欢迎门槛：三项可分别开关（只欢迎高等级 / 高粉丝团 / 高消费，任意一项达标就欢迎）
 type WelcomeConfig struct {
-	Enabled   bool    `json:"enabled"`   // 关=所有人都欢迎
-	MinLevel  int     `json:"minLevel"`  // 账号等级 ≥，0=不限
-	MinFans   int     `json:"minFans"`   // 粉丝团等级 ≥，0=不限
-	MinValue  float64 `json:"minValue"`  // 累计消费抖币 ≥，0=不限
+	Enabled   bool    `json:"enabled"`   // 总开关：关=所有人都欢迎
+	LevelOn   bool    `json:"levelOn"`   // 看账号等级
+	FansOn    bool    `json:"fansOn"`    // 看粉丝团等级
+	ValueOn   bool    `json:"valueOn"`   // 看累计消费
+	MinLevel  int     `json:"minLevel"`  // 账号等级 ≥
+	MinFans   int     `json:"minFans"`   // 粉丝团等级 ≥
+	MinValue  float64 `json:"minValue"`  // 累计消费抖币 ≥
 }
 
 // Config 全局配置
@@ -204,6 +207,12 @@ func loadConfig(dir string) *ConfigStore {
 	}
 	if c.PadDuration == 0 {
 		c.PadDuration = 5000
+	}
+	// 老配置只有 minLevel/minFans/minValue，没有分项开关：按阈值 >0 自动打开对应项
+	if c.Welcome.Enabled && !c.Welcome.LevelOn && !c.Welcome.FansOn && !c.Welcome.ValueOn {
+		c.Welcome.LevelOn = c.Welcome.MinLevel > 0
+		c.Welcome.FansOn = c.Welcome.MinFans > 0
+		c.Welcome.ValueOn = c.Welcome.MinValue > 0
 	}
 	if c.Mode == "" {
 		c.Mode = def.Mode
