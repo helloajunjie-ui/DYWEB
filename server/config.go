@@ -84,6 +84,14 @@ var liveModes = []LiveMode{
 	},
 }
 
+// WelcomeConfig 进场欢迎门槛：只欢迎「高等级 / 高粉丝团 / 高消费」的人，门槛由主播设
+type WelcomeConfig struct {
+	Enabled   bool    `json:"enabled"`   // 关=所有人都欢迎
+	MinLevel  int     `json:"minLevel"`  // 账号等级 ≥，0=不限
+	MinFans   int     `json:"minFans"`   // 粉丝团等级 ≥，0=不限
+	MinValue  float64 `json:"minValue"`  // 累计消费抖币 ≥，0=不限
+}
+
 // Config 全局配置
 type Config struct {
 	Port        int                 `json:"port"`
@@ -94,6 +102,7 @@ type Config struct {
 	LLM         LLMConfig           `json:"llm"`
 	Mapping     map[string][]string `json:"mapping"`     // 字段映射：逻辑字段 -> 候选路径
 	TypeAliases map[string][]string `json:"typeAliases"` // 事件类型别名
+	Welcome     WelcomeConfig       `json:"welcome"`      // 进场欢迎门槛
 }
 
 func defaultConfig() Config {

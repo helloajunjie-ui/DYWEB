@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { post } from '../ws.js'
 
 const props = defineProps({ data: { type: Object, required: true } })
@@ -11,6 +11,22 @@ const tags = ref('')
 const message = ref('')
 
 const fmt = (ts) => (ts ? new Date(ts).toLocaleString('zh-CN', { hour12: false }) : '—')
+
+const q = ref('')
+const onlyNote = ref(false)
+const list = computed(() => {
+  const arr = props.data.fans || []
+  return arr.filter((f) => {
+    if (onlyNote.value && !(f.note || (f.notes || []).length)) return false
+    if (!q.value.trim()) return true
+    const s = q.value.trim().toLowerCase()
+    return (
+      (f.name || '').toLowerCase().includes(s) ||
+      (f.note || '').toLowerCase().includes(s) ||
+      (f.tags || []).join(',').toLowerCase().includes(s)
+    )
+  })
+})
 
 function open(f) {
   editing.value = f
@@ -36,9 +52,17 @@ async function save() {
 
 <template>
   <div class="row" style="margin-bottom: 12px">
-    <div class="hint">画像自动累计互动与消费；「备注」会注入到话术模板的 {fanNote}，老粉进场可直接提醒主播。</div>
+    <div class="hint">备注只给自己看，用来筛人（谁值得维护、谁是路人），不会念进播报。</div>
     <span style="flex: 1"></span>
     <span v-if="message" class="tag warn">{{ message }}</span>
+  </div>
+
+  <div class="row" style="margin-bottom: 10px">
+    <input v-model="q" placeholder="搜名字 / 备注 / 标签" style="width: 220px" />
+    <label class="switch"><input type="checkbox" v-model="onlyNote" /><i></i></label>
+    <span class="small muted">只看有备注的</span>
+    <span style="flex: 1"></span>
+    <span class="small muted">共 {{ list.length }} 人</span>
   </div>
 
   <div class="card" style="padding: 0">
@@ -49,7 +73,7 @@ async function save() {
         </tr>
       </thead>
       <tbody>
-        <tr v-for="f in data.fans || []" :key="f.key">
+        <tr v-for="f in list" :key="f.key">
           <td>
             {{ f.name }}
             <span v-if="f.regular" class="tag bad">老粉</span>
@@ -66,7 +90,7 @@ async function save() {
           <td class="small">{{ f.note || '—' }}<span v-if="(f.notes || []).length > 1" class="tag" style="margin-left: 6px">{{ f.notes.length }} 条</span></td>
           <td><button class="btn sm ghost" @click="open(f)">备注</button></td>
         </tr>
-        <tr v-if="!(data.fans || []).length"><td colspan="9" class="muted">还没有观众数据，先推几条弹幕进来</td></tr>
+        <tr v-if="!list.length"><td colspan="9" class="muted">{{ (props.data.fans || []).length ? '没有符合条件的观众' : '还没有观众数据，先推几条弹幕进来' }}</td></tr>
       </tbody>
     </table>
   </div>

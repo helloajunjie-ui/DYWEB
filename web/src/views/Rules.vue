@@ -10,6 +10,27 @@ const editing = ref(null) // 索引
 const message = ref('')
 const advanced = ref(false)
 const editText = ref('')
+const welcome = ref({ enabled: false, minLevel: 0, minFans: 0, minValue: 0 })
+
+async function loadWelcome() {
+  try {
+    const c = await (await fetch('/api/config')).json()
+    if (c.welcome) welcome.value = c.welcome
+  } catch (e) {}
+}
+
+async function saveWelcome() {
+  try {
+    const c = await (await fetch('/api/config')).json()
+    c.welcome = welcome.value
+    const res = await post('/api/config', c)
+    message.value = res.ok ? '欢迎门槛已保存' : res.msg || '保存失败'
+  } catch (e) {
+    message.value = '保存失败：' + e.message
+  }
+}
+
+loadWelcome()
 
 const triggers = [
   { id: 'gift', name: '有人送礼物' },
@@ -192,6 +213,30 @@ const matchLabel = (r) => {
     <span v-if="message" class="tag warn">{{ message }}</span>
     <button class="btn" @click="openNew">新建规则</button>
     <button class="btn primary" @click="save">保存全部</button>
+  </div>
+
+  <div class="card" style="margin-bottom: 12px">
+    <div class="row">
+      <h3 style="margin: 0">进场欢迎：只欢迎值得欢迎的人</h3>
+      <span style="flex: 1"></span>
+      <label class="switch"><input type="checkbox" v-model="welcome.enabled" /><i></i></label>
+    </div>
+    <div class="small muted" style="margin: 6px 0 0">
+      开着 → 只欢迎下面任意一项达标的人；关掉 → 谁进来都欢迎（默认关）。
+    </div>
+    <div v-if="welcome.enabled" class="wrap" style="margin-top: 12px">
+      <span>账号等级 ≥</span>
+      <input v-model.number="welcome.minLevel" type="number" min="0" style="width: 80px" />
+      <span>粉丝团等级 ≥</span>
+      <input v-model.number="welcome.minFans" type="number" min="0" style="width: 80px" />
+      <span>累计消费 ≥</span>
+      <input v-model.number="welcome.minValue" type="number" min="0" style="width: 100px" />
+      <span class="small muted">抖币</span>
+    </div>
+    <div v-if="welcome.enabled" class="small muted" style="margin-top: 6px">填 0 = 这一项不限；三项满足任意一项就算「值得欢迎」。</div>
+    <div class="row" style="margin-top: 10px">
+      <button class="btn primary" @click="saveWelcome">保存欢迎门槛</button>
+    </div>
   </div>
 
   <div class="card" style="padding: 0">

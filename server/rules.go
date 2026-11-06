@@ -240,7 +240,7 @@ func defaultRules() []Rule {
 			Match: MatchSpec{Types: []string{"gift"}, MinValue: 1, ComboWithinMS: 3000},
 			Actions: []Action{{
 				Type:           "tts",
-				Template:       "感谢{user}送的{gift}×{count}，谢谢老板！{fanNote}",
+				Template:       "感谢{user}送的{gift}×{count}，谢谢老板！",
 				DurationMS:     3000,
 			}},
 		},
@@ -292,7 +292,7 @@ func defaultRules() []Rule {
 			Match: MatchSpec{Types: []string{"enter"}, OnlyRegular: true, RegularMin: 5},
 			Actions: []Action{
 				{Type: "banner", Template: "{user} 来啦", DurationMS: 4000, Color: "#7ED0FF"},
-				{Type: "tts", Template: "真爱粉{user}进场了。{fanNote}"},
+				{Type: "tts", Template: "真爱粉{user}进场了"},
 			},
 		},
 	}

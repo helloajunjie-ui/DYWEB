@@ -184,6 +184,20 @@ func (s *Store) IncRuleHits() {
 	s.mu.Unlock()
 }
 
+func (s *Store) FanOf(user, userID string) (Fan, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := userID
+	if key == "" {
+		key = user
+	}
+	f := s.fans[key]
+	if f == nil {
+		return Fan{}, false
+	}
+	return *f, true
+}
+
 func (s *Store) Fans() []Fan {
 	s.mu.Lock()
 	defer s.mu.Unlock()

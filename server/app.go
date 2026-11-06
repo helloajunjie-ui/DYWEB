@@ -118,6 +118,7 @@ func (a *App) HandleRaw(raw map[string]any) Event {
 }
 
 func (a *App) HandleEvent(ev Event) Event {
+	cfg := a.cfg.Get()
 	// 礼物价目补全：工具只推礼物名时，用礼物库算单价
 	if ev.Type == "gift" && ev.GiftName != "" {
 		if ev.GiftValue <= 0 {
@@ -134,6 +135,17 @@ func (a *App) HandleEvent(ev Event) Event {
 
 	if !a.mods.IsEnabled("field_mapping") {
 		return ev
+	}
+	if cfg.Welcome.Enabled && ev.Type == "enter" {
+		// 只欢迎「高等级 / 高粉丝团 / 高消费」，门槛由主播设；关掉门槛就是谁都欢迎
+		f, ok := a.store.FanOf(ev.User, ev.UserID)
+		hit := ok && ((cfg.Welcome.MinLevel > 0 && f.Level >= cfg.Welcome.MinLevel) ||
+			(cfg.Welcome.MinFans > 0 && f.FansClubLevel >= cfg.Welcome.MinFans) ||
+			(cfg.Welcome.MinValue > 0 && f.GiftValue >= cfg.Welcome.MinValue))
+		if !hit {
+			a.addTrace(Trace{TS: time.Now().UnixMilli(), Rule: "欢迎门槛", Action: "skip", OK: true, User: ev.User, EventID: ev.ID, Msg: "未达欢迎门槛，跳过欢迎"})
+			return ev
+		}
 	}
 	for _, h := range a.rules.Eval(&ev) {
 		a.store.IncRuleHits()
