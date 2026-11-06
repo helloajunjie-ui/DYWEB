@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
+	"time"
 )
 
 // registerIngest 数据入口：HTTP POST /push、HTTP GET /push?data=、WS /ws/ingest
@@ -41,6 +43,9 @@ func (a *App) registerIngest(mux *http.ServeMux) {
 			writeJSON(w, 400, map[string]any{"ok": false, "msg": err.Error(), "count": n})
 			return
 		}
+		if n > 0 {
+			atomic.StoreInt64(&a.lastIngest, time.Now().Unix())
+		}
 		writeJSON(w, 200, map[string]any{"ok": true, "count": n})
 	})
 
@@ -60,7 +65,9 @@ func (a *App) registerIngest(mux *http.ServeMux) {
 			if err != nil {
 				return
 			}
-			_, _ = a.ingestPayload(msg)
+			if n, err := a.ingestPayload(msg); err == nil && n > 0 {
+				atomic.StoreInt64(&a.lastIngest, time.Now().Unix())
+			}
 		}
 	})
 }

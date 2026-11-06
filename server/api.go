@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -697,6 +698,38 @@ func (a *App) registerAPI(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"ok": true, "clients": a.hub.Count(), "uptimeMs": time.Now().UnixMilli() - a.started})
+	})
+
+	// 直播状态：伴侣在不在跑、是不是在推流、有没有收到弹幕数据
+	mux.HandleFunc("/api/live/status", func(w http.ResponseWriter, r *http.Request) {
+		running, title, rate := probeLive()
+		last := atomic.LoadInt64(&a.lastIngest)
+		eventAgo := -1
+		if last > 0 {
+			eventAgo = int(time.Now().Unix() - last)
+		}
+		state, hint := "off", "没检测到直播伴侣在运行"
+		if running {
+			state = "open"
+			hint = "伴侣已打开，但没有在推流（或还没点开始直播）"
+			if strings.Contains(title, "直播中") || strings.Contains(title, "正在直播") {
+				state, hint = "living", "伴侣窗口显示正在直播"
+			}
+			if rate >= 60*1024 {
+				state, hint = "living", "伴侣正在上传画面，判断为在直播"
+			}
+			if eventAgo >= 0 && eventAgo <= 90 {
+				state, hint = "living", "刚收到直播间数据（弹幕/礼物在流动）"
+			}
+		}
+		writeJSON(w, 200, map[string]any{
+			"state":       state,
+			"companion":   running,
+			"title":       title,
+			"uploadKBps":  rate / 1024,
+			"eventAgeSec": eventAgo,
+			"hint":        hint,
+		})
 	})
 }
 

@@ -141,7 +141,7 @@ onMounted(() => {
     <main class="main">
       <div class="topbar">
         <span class="dot" :class="{ on: connected }"></span>
-        <span class="muted small">{{ connected ? '已连接引擎' : '连接中断，正在重试' }}</span>
+        <span class="muted small">{{ connected ? '本机已连接' : '连接中断，正在重试' }}</span>
         <span class="muted small">事件/分 {{ Math.round(data.stats.perMinute || 0) }}</span>
         <span class="spacer"></span>
         <span class="small muted">直播定位</span>

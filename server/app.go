@@ -16,22 +16,23 @@ import (
 
 // App 装配体
 type App struct {
-	cfg      *ConfigStore
-	rules    *RulesStore
-	store    *Store
-	hub      *Hub
-	tts      *TTS
-	mods     *ModuleStore
-	merger   *Merger
-	llm      *LLMClient
-	gifts    *GiftStore
-	scripts  *ScriptStore
-	products *ProductStore
-	game     *GameEngine
-	root     string
-	dataDir  string
-	sfxDir   string
-	started  int64
+	cfg        *ConfigStore
+	rules      *RulesStore
+	store      *Store
+	hub        *Hub
+	tts        *TTS
+	mods       *ModuleStore
+	merger     *Merger
+	llm        *LLMClient
+	gifts      *GiftStore
+	scripts    *ScriptStore
+	products   *ProductStore
+	game       *GameEngine
+	root       string
+	dataDir    string
+	sfxDir     string
+	started    int64
+	lastIngest int64 // 最近一次收到外部事件的 unix 秒（直播状态推断用）
 
 	traceMu sync.Mutex
 	traces  []Trace

@@ -1,9 +1,26 @@
 <script setup>
+import { ref, onMounted, onUnmounted } from 'vue'
 const props = defineProps({
   data: { type: Object, required: true },
   events: { type: Array, required: true },
   traces: { type: Array, required: true }
 })
+
+const live = ref(null)
+let liveTimer = null
+async function loadLive() {
+  try {
+    live.value = await (await fetch('/api/live/status')).json()
+  } catch (e) {}
+}
+onMounted(() => {
+  loadLive()
+  liveTimer = setInterval(loadLive, 8000)
+})
+onUnmounted(() => clearInterval(liveTimer))
+const liveLabel = (s) => ({ living: '直播中', open: '伴侣已开，还没开播', off: '没检测到直播' }[s] || '检测中')
+const liveClass = (s) => (s === 'living' ? 'ok' : s === 'open' ? 'warn' : 'muted')
+const fmtAgo = (s) => (s < 0 ? '从没收到过' : s <= 1 ? '刚刚' : `${s} 秒前`)
 
 const fmtTime = (ts) => (ts ? new Date(ts).toLocaleTimeString('zh-CN', { hour12: false }) : '')
 const typeName = (t) => ({ danmaku: '弹幕', gift: '礼物', like: '点赞', enter: '进场', follow: '关注', guard: '星守护', fansclub: '粉丝团' }[t] || t)
@@ -23,6 +40,21 @@ const curMode = (d) => (d.modes || []).find((m) => m.id === d.mode) || null
 </script>
 
 <template>
+  <div v-if="live" class="card" style="margin-bottom: 14px">
+    <div class="row" style="align-items: center">
+      <span class="dot" :class="{ on: live.state === 'living' }"></span>
+      <h3 style="margin: 0; flex: 1">直播状态：<span :class="liveClass(live.state)">{{ liveLabel(live.state) }}</span></h3>
+      <span class="small muted">每 8 秒自动看一眼</span>
+    </div>
+    <div class="small" style="margin-top: 4px">{{ live.hint }}</div>
+    <div class="small muted" style="margin-top: 4px">
+      伴侣上传 {{ live.uploadKBps }} KB/s ｜ 最近一条直播间数据：{{ fmtAgo(live.eventAgeSec) }}
+    </div>
+    <div v-if="live.state === 'living' && live.eventAgeSec < 0" class="small warn" style="margin-top: 4px">
+      画面在推，但一条弹幕/礼物数据都没收到：弹幕工具还没把数据推到本程序（先用调试台模拟，或接推送工具）。
+    </div>
+  </div>
+
   <div v-if="curMode(data)" class="card" style="margin-bottom: 14px">
     <div class="row" style="margin-bottom: 6px">
       <h3 style="margin: 0">当前定位：{{ curMode(data).name }}</h3>
