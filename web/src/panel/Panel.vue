@@ -10,6 +10,29 @@ const toast = ref('')
 let ws = null
 
 const hosts = computed(() => location.host)
+const ttsOn = ref(true)
+
+async function loadTts() {
+  try {
+    const c = await get('/api/config')
+    ttsOn.value = !!(c && c.tts && c.tts.enabled)
+  } catch {
+    /* ignore */
+  }
+}
+
+async function toggleTts() {
+  try {
+    const c = await get('/api/config')
+    c.tts = c.tts || {}
+    c.tts.enabled = !ttsOn.value
+    await post('/api/config', c)
+    ttsOn.value = !!c.tts.enabled
+  } catch {
+    /* ignore */
+  }
+}
+loadTts()
 
 const themes = ['尺度大一点', '职场吐槽', '土味情话', '狠一点', '宠粉']
 
@@ -208,6 +231,7 @@ const statusText = computed(() => {
   <div class="wrap">
     <header>
       <h1>主播中控台</h1>
+      <button class="mini ghost tts-btn" @click="toggleTts">播报 {{ ttsOn ? '开' : '关' }}</button>
       <span class="dot" :class="connected ? 'on' : 'off'"></span>
     </header>
 
@@ -333,6 +357,7 @@ const statusText = computed(() => {
   background: radial-gradient(circle at 50% -10%, #1a2133 0%, #0e1016 60%);
 }
 header { display: flex; align-items: center; gap: 10px; }
+.tts-btn { margin-left: auto; padding: 6px 12px; font-size: 13px; }
 h1 { font-size: 22px; margin: 0; letter-spacing: 1px; }
 .dot { width: 10px; height: 10px; border-radius: 50%; }
 .dot.on { background: #37d67a; box-shadow: 0 0 10px #37d67a; }
