@@ -13,6 +13,10 @@ const modelList = ref([])
 const aiMsg = ref('')
 const busy = ref(false)
 const showAdvanced = ref(false)
+const showSystem = ref(false)
+
+// 一次只显示一件事：先选要调什么，再出对应配置
+const tab = ref('ai')
 
 const providers = [
   { id: 'deepseek', name: 'DeepSeek', base: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
@@ -20,6 +24,8 @@ const providers = [
   { id: 'dashscope', name: '阿里通义', base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' },
   { id: 'ollama', name: '本机 Ollama', base: 'http://127.0.0.1:11434/v1', model: 'qwen2.5' }
 ]
+const activeProvider = ref('')
+const providerName = () => (providers.find((p) => p.id === activeProvider.value) || {}).name || ''
 
 const modelLabels = {
   'deepseek-chat': 'DeepSeek 通用对话',
@@ -34,6 +40,7 @@ const modelLabels = {
 const modelLabel = (id) => modelLabels[id] || id
 
 function useProvider(p) {
+  activeProvider.value = p.id
   cfg.value.llm.baseUrl = p.base
   if (p.model) cfg.value.llm.model = p.model
   aiMsg.value = '已填好 ' + p.name + ' 的地址，粘贴你的 Key 后点「自动获取模型」'
@@ -53,7 +60,7 @@ async function fetchModels() {
     if (!cfg.value.llm.model || !modelList.value.includes(cfg.value.llm.model)) {
       cfg.value.llm.model = modelList.value[0] || ''
     }
-    aiMsg.value = `拿到了 ${modelList.value.length} 个模型，已自动选好第一个，可以点「测试连接」验一下`
+    aiMsg.value = `拿到了 ${modelList.value.length} 个模型，已自动选好第一个，点「测试连接」验一下`
   } else {
     modelList.value = []
     aiMsg.value = '没拿到列表：' + (res.error || '未知原因') + (res.suggestions?.length ? `｜可手填：${res.suggestions.join(' / ')}` : '')
@@ -75,8 +82,14 @@ async function probe() {
 onMounted(() => {
   if (!cfg.value.llm) cfg.value.llm = {}
   if (!cfg.value.tts) cfg.value.tts = {}
-  // 已经存过 Key 的，进页面就自动拿一次模型列表
-  if (cfg.value.llm.baseUrl && cfg.value.llm.apiKey) fetchModels()
+  if (!cfg.value.tts.rate) cfg.value.tts.rate = 0
+  if (!cfg.value.tts.volume) cfg.value.tts.volume = 90
+  if (cfg.value.llm.baseUrl && cfg.value.llm.apiKey) {
+    tab.value = 'ai'
+    fetchModels()
+  } else if (cfg.value.tts && cfg.value.tts.enabled) {
+    tab.value = 'tts'
+  }
 })
 
 async function save() {
@@ -91,115 +104,241 @@ async function save() {
   msg.value = res.ok ? res.msg : '保存失败：' + (res.msg || '')
   if (res.ok) emit('reload')
 }
+
+function setTtsMode(m) {
+  cfg.value.tts.mode = m
+}
 </script>
 
 <template>
   <div class="row" style="margin-bottom: 12px">
-    <div class="hint">改端口或字段映射需要重启 exe 才生效；TTS / LLM 保存后立即生效。</div>
+    <div class="hint">先选你要改的那一件事，下面的配置就只显示这一块，不用在一堆格子里找。</div>
     <span style="flex: 1"></span>
     <span v-if="msg" class="tag warn">{{ msg }}</span>
     <button class="btn primary" @click="save">保存设置</button>
   </div>
 
-  <div class="grid c2">
-    <div class="card">
-      <h3>基础</h3>
-      <div class="kv">
-        <label>监听端口</label>
-        <input v-model.number="cfg.port" type="number" />
-        <label>横幅默认时长</label>
-        <input v-model.number="cfg.padDurationMs" type="number" />
-        <label>音效目录</label>
-        <input v-model="cfg.sfxDir" />
-      </div>
-      <div class="hint" style="margin-top: 10px">
-        推送地址：<code>http://127.0.0.1:{{ cfg.port }}/push</code>　WebSocket：<code>ws://127.0.0.1:{{ cfg.port }}/ws/ingest</code>
+  <div class="tabs">
+    <button class="tab" :class="{ on: tab === 'ai' }" @click="tab = 'ai'">🤖 让 AI 写台词</button>
+    <button class="tab" :class="{ on: tab === 'tts' }" @click="tab = 'tts'">🔊 语音播报</button>
+    <button class="tab" :class="{ on: tab === 'basic' }" @click="tab = 'basic'">🧰 基础与对接</button>
+  </div>
+
+  <!-- AI 话术 -->
+  <div v-if="tab === 'ai'" class="card">
+    <h3>让 AI 帮你写台词</h3>
+    <p class="small muted" style="margin: 4px 0 16px">
+      三步：选服务商 → 粘 Key → 点自动获取模型。模型名不用自己打。
+    </p>
+
+    <div class="step">
+      <b>1. 你用的是哪家</b>
+      <div class="chips">
+        <button
+          v-for="p in providers"
+          :key="p.id"
+          class="chip"
+          :class="{ on: activeProvider === p.id }"
+          @click="useProvider(p)"
+        >{{ p.name }}</button>
       </div>
     </div>
 
-    <div class="card">
-      <h3>TTS 播报</h3>
-      <div class="kv">
-        <label>启用</label>
-        <label class="switch"><input type="checkbox" v-model="cfg.tts.enabled" /><i></i></label>
-        <label>模式</label>
-        <select v-model="cfg.tts.mode">
-          <option value="local">本机 SAPI（离线）</option>
-          <option value="browser">页面朗读</option>
-          <option value="both">两者都念</option>
+    <div class="step">
+      <b>2. 把 Key 粘进来</b>
+      <input v-model="cfg.llm.apiKey" placeholder="sk-...（粘一次就存在本机，下次不用再粘）" />
+      <div class="hint" style="margin-top: 6px">Ollama 是本机跑的，这格可以留空。</div>
+    </div>
+
+    <div class="step">
+      <b>3. 让系统自己认模型</b>
+      <div class="row" style="margin: 8px 0">
+        <button class="btn" :disabled="busy" @click="fetchModels">自动获取模型</button>
+        <button class="btn" :disabled="busy" @click="probe">测试连接</button>
+        <select v-if="modelList.length" v-model="cfg.llm.model" style="max-width: 260px">
+          <option v-for="m in modelList" :key="m" :value="m">{{ modelLabel(m) }}</option>
         </select>
-        <label>音色</label>
-        <select v-model="cfg.tts.voice">
+        <span v-else class="small muted">{{ cfg.llm.model || '还没有模型，先点左边那个按钮' }}</span>
+      </div>
+      <div class="small" :class="aiMsg.startsWith('通了') ? 'ok' : 'muted'">{{ aiMsg }}</div>
+    </div>
+
+    <div class="step row" style="align-items: center">
+      <b style="flex: 1">启用 AI 话术（规则里的 AI 动作才会跑）</b>
+      <label class="switch"><input type="checkbox" v-model="cfg.llm.enabled" /><i></i></label>
+    </div>
+
+    <div style="margin-top: 14px">
+      <button class="btn sm ghost" @click="showSystem = !showSystem">
+        {{ showSystem ? '收起人设' : 'AI 的人设与红线（新手不用改）' }}
+      </button>
+      <div v-if="showSystem" style="margin-top: 8px">
+        <textarea v-model="cfg.llm.system" rows="5"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- 语音播报 -->
+  <div v-if="tab === 'tts'" class="card">
+    <div class="row" style="align-items: center">
+      <div style="flex: 1">
+        <h3 style="margin: 0">语音播报</h3>
+        <p class="small muted" style="margin: 4px 0 0">关掉就一句都不念；开着重播词也只在中奖/大礼物时念。</p>
+      </div>
+      <label class="switch big"><input type="checkbox" v-model="cfg.tts.enabled" /><i></i></label>
+    </div>
+
+    <div v-if="cfg.tts.enabled" style="margin-top: 18px">
+      <div class="step">
+        <b>用哪个嗓子</b>
+        <div class="chips">
+          <button class="chip" :class="{ on: cfg.tts.mode === 'local' }" @click="setTtsMode('local')">本机声音（离线可用）</button>
+          <button class="chip" :class="{ on: cfg.tts.mode === 'browser' }" @click="setTtsMode('browser')">网页声音（跟随浏览器）</button>
+          <button class="chip" :class="{ on: cfg.tts.mode === 'both' }" @click="setTtsMode('both')">两个都放</button>
+        </div>
+      </div>
+
+      <div v-if="cfg.tts.mode !== 'browser'" class="step">
+        <b>音色</b>
+        <select v-model="cfg.tts.voice" style="max-width: 320px">
           <option value="">系统默认</option>
           <option v-for="v in data.voices || []" :key="v" :value="v">{{ v }}</option>
         </select>
-        <label>语速 (-10~10)</label>
-        <input v-model.number="cfg.tts.rate" type="number" min="-10" max="10" />
-        <label>音量 (0~100)</label>
-        <input v-model.number="cfg.tts.volume" type="number" min="0" max="100" />
+      </div>
+
+      <div class="step">
+        <b>语速：{{ cfg.tts.rate > 0 ? '偏快' : cfg.tts.rate < 0 ? '偏慢' : '正常' }}</b>
+        <input v-model.number="cfg.tts.rate" type="range" min="-10" max="10" step="1" />
+      </div>
+
+      <div class="step">
+        <b>音量：{{ cfg.tts.volume }}</b>
+        <input v-model.number="cfg.tts.volume" type="range" min="0" max="100" step="5" />
       </div>
     </div>
   </div>
 
-  <div class="card" style="margin-top: 14px">
-    <h3>AI 话术</h3>
-    <div class="row" style="margin-bottom: 10px">
-      <span class="small muted">先点服务商，再粘 Key，剩下的交给系统：</span>
-    </div>
-    <div class="wrap" style="margin-bottom: 14px">
-      <button v-for="p in providers" :key="p.id" class="btn sm" @click="useProvider(p)">{{ p.name }}</button>
-    </div>
-    <div class="kv">
-      <label>启用</label>
-      <label class="switch"><input type="checkbox" v-model="cfg.llm.enabled" /><i></i></label>
-      <label>API Key</label>
-      <input v-model="cfg.llm.apiKey" placeholder="sk-...（粘贴到这里，Ollama 可留空）" />
-      <label>地址</label>
-      <input v-model="cfg.llm.baseUrl" placeholder="点上面的服务商就会自动填好" />
-      <label>模型</label>
-      <select v-if="modelList.length" v-model="cfg.llm.model">
-        <option v-for="m in modelList" :key="m" :value="m">{{ modelLabel(m) }}</option>
-      </select>
-      <input v-else v-model="cfg.llm.model" placeholder="点「自动获取模型」后这里会变成下拉框" />
-      <label>超时(ms)</label>
-      <input v-model.number="cfg.llm.timeoutMs" type="number" />
-    </div>
-    <div class="row" style="margin-top: 12px">
-      <button class="btn" :disabled="busy" @click="fetchModels">自动获取模型</button>
-      <button class="btn" :disabled="busy" @click="probe">测试连接</button>
-      <span class="small" :class="aiMsg.startsWith('通了') ? 'ok' : 'muted'">{{ aiMsg }}</span>
-    </div>
-    <div class="hint" style="margin-top: 10px">
-      填好这三个之后，点右上角「保存设置」；之后规则里的 AI 动作就会用它来生成台词。
-    </div>
-    <div style="margin-top: 12px">
-      <div class="small muted" style="margin-bottom: 6px">人设与红线（System Prompt，新手不用改）</div>
-      <textarea v-model="cfg.llm.system" rows="4"></textarea>
-    </div>
-  </div>
+  <!-- 基础与对接 -->
+  <div v-if="tab === 'basic'" class="card">
+    <h3>基础与对接</h3>
+    <p class="small muted" style="margin: 4px 0 16px">这一页平时不用动，改端口或对接第三方工具时才看。</p>
 
-  <div class="card" style="margin-top: 14px">
-    <div class="row">
-      <h3 style="margin: 0">字段映射 · 类型别名</h3>
-      <span style="flex: 1"></span>
+    <div class="step">
+      <b>监听端口</b>
+      <input v-model.number="cfg.port" type="number" style="max-width: 180px" />
+      <div class="hint" style="margin-top: 6px">默认 9101，改了要重启 exe 才生效；改之前先确认没被别的软件占用。</div>
+    </div>
+
+    <div class="step">
+      <b>给别的软件推事件用这两个地址</b>
+      <div class="hint">
+        推送：<code>http://127.0.0.1:{{ cfg.port }}/push</code><br />
+        长连接：<code>ws://127.0.0.1:{{ cfg.port }}/ws/ingest</code>
+      </div>
+    </div>
+
+    <div class="step">
+      <b>音效目录</b>
+      <input v-model="cfg.sfxDir" />
+      <div class="hint" style="margin-top: 6px">放手写音效的文件夹，默认就是程序旁边的 sfx。</div>
+    </div>
+
+    <div class="step">
+      <b>横幅默认显示时长（毫秒）</b>
+      <input v-model.number="cfg.padDurationMs" type="number" style="max-width: 180px" />
+      <div class="hint" style="margin-top: 6px">4000 = 4 秒。</div>
+    </div>
+
+    <div style="margin-top: 16px">
       <button class="btn sm ghost" @click="showAdvanced = !showAdvanced">
-        {{ showAdvanced ? '收起' : '展开（第三方工具推的数据对不上时才动）' }}
+        {{ showAdvanced ? '收起字段映射' : '对接第三方工具时，字段对不上才动这里' }}
       </button>
-    </div>
-    <div v-if="showAdvanced">
-      <div class="hint" style="margin: 10px 0 8px">
-        左边是我们认的字段，右边是候选路径（点号取嵌套，命中即用）。注意这是 JSON，改错会保存失败。
-      </div>
-      <div class="grid c2">
-        <div>
-          <div class="small muted" style="margin-bottom: 6px">mapping</div>
-          <textarea v-model="mappingText" rows="16" spellcheck="false" style="font-family: Consolas, monospace"></textarea>
+      <div v-if="showAdvanced">
+        <div class="hint" style="margin: 10px 0 8px">
+          左边是系统认的字段，右边是候选路径（点号取嵌套，命中即用）。这是 JSON，改错会保存失败。
         </div>
-        <div>
-          <div class="small muted" style="margin-bottom: 6px">typeAliases（事件类型别名）</div>
-          <textarea v-model="aliasText" rows="16" spellcheck="false" style="font-family: Consolas, monospace"></textarea>
+        <div class="grid c2">
+          <div>
+            <div class="small muted" style="margin-bottom: 6px">mapping</div>
+            <textarea v-model="mappingText" rows="14" spellcheck="false" style="font-family: Consolas, monospace"></textarea>
+          </div>
+          <div>
+            <div class="small muted" style="margin-bottom: 6px">typeAliases（事件类型别名）</div>
+            <textarea v-model="aliasText" rows="14" spellcheck="false" style="font-family: Consolas, monospace"></textarea>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.tab {
+  border: 1px solid #262c3a;
+  background: rgba(255, 255, 255, 0.03);
+  color: #b7bfd2;
+  border-radius: 14px;
+  padding: 12px 18px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.16s;
+}
+.tab:hover {
+  border-color: #3a465c;
+  color: #fff;
+}
+.tab.on {
+  background: rgba(255, 210, 74, 0.14);
+  border-color: #ffd24a;
+  color: #ffd24a;
+  font-weight: 700;
+}
+.step {
+  padding: 14px 0;
+  border-top: 1px solid #202634;
+}
+.step:first-of-type {
+  border-top: none;
+}
+.step b {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 15px;
+  color: #e8ecf6;
+}
+.step input[type='range'] {
+  width: 100%;
+  max-width: 420px;
+  accent-color: #ffd24a;
+}
+.chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.chip {
+  border: 1px solid #2c3546;
+  background: rgba(255, 255, 255, 0.04);
+  color: #c7cfdf;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.chip.on {
+  border-color: #ffd24a;
+  color: #ffd24a;
+  background: rgba(255, 210, 74, 0.14);
+  font-weight: 700;
+}
+.switch.big {
+  transform: scale(1.25);
+  transform-origin: right center;
+}
+</style>
