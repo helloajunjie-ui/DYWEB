@@ -178,6 +178,43 @@ func (a *App) registerAPI(mux *http.ServeMux) {
 		}
 	})
 
+	// 改单条话术（内置的存成覆盖项） / 撤销修改
+	mux.HandleFunc("/api/scripts/item", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeJSON(w, 405, map[string]any{"ok": false})
+			return
+		}
+		var s Script
+		if err := json.NewDecoder(r.Body).Decode(&s); err != nil {
+			writeJSON(w, 400, map[string]any{"ok": false, "error": "JSON 解析失败：" + err.Error()})
+			return
+		}
+		if strings.TrimSpace(s.Text) == "" {
+			writeJSON(w, 400, map[string]any{"ok": false, "error": "内容不能为空"})
+			return
+		}
+		if err := a.scripts.SaveOne(s); err != nil {
+			writeJSON(w, 500, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/scripts/reset", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeJSON(w, 405, map[string]any{"ok": false})
+			return
+		}
+		var body struct {
+			ID string `json:"id"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if err := a.scripts.ResetOne(body.ID); err != nil {
+			writeJSON(w, 500, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"ok": true})
+	})
+
 	// 直接念一条话术（变量用示例值替换，主播自己也能改）
 	mux.HandleFunc("/api/scripts/say", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {

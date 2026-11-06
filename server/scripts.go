@@ -17,6 +17,7 @@ type Script struct {
 	Title   string `json:"title"`
 	Text    string `json:"text"`
 	Builtin bool   `json:"builtin"`
+	Edited  bool   `json:"edited,omitempty"`
 }
 
 type ScriptCategory struct {
@@ -94,29 +95,56 @@ func defaultScripts() []Script {
 	return out
 }
 
-// ScriptStore 内置话术 + 主播自己加的话术
+// ScriptStore 内置话术 + 主播自己加的话术 + 对内置话术的覆盖修改
 type ScriptStore struct {
 	mu     sync.Mutex
 	custom []Script
+	edits  map[string]Script // 内置话术 ID → 改过的版本
 	path   string
+	editPath string
 }
 
 func newScriptStore(dataDir string) *ScriptStore {
-	s := &ScriptStore{path: filepath.Join(dataDir, "scripts.json")}
+	s := &ScriptStore{path: filepath.Join(dataDir, "scripts.json"), editPath: filepath.Join(dataDir, "scripts_edits.json")}
 	if b, err := os.ReadFile(s.path); err == nil {
 		var saved []Script
 		if json.Unmarshal(b, &saved) == nil {
 			s.custom = saved
 		}
 	}
+	if b, err := os.ReadFile(s.editPath); err == nil {
+		var saved []Script
+		if json.Unmarshal(b, &saved) == nil {
+			s.edits = map[string]Script{}
+			for _, e := range saved {
+				if e.ID != "" {
+					s.edits[e.ID] = e
+				}
+			}
+		}
+	}
+	if s.edits == nil {
+		s.edits = map[string]Script{}
+	}
 	return s
 }
 
-// List 内置在前，自定义在后
+// List 内置在前（应用过覆盖修改），自定义在后
 func (s *ScriptStore) List() []Script {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := append([]Script{}, defaultScripts()...)
+	base := defaultScripts()
+	out := make([]Script, 0, len(base)+len(s.custom))
+	for _, b := range base {
+		if e, ok := s.edits[b.ID]; ok {
+			b.Title = e.Title
+			b.Text = e.Text
+			b.Category = e.Category
+			b.Scene = e.Scene
+			b.Edited = true
+		}
+		out = append(out, b)
+	}
 	for _, c := range s.custom {
 		c.Builtin = false
 		if c.ID == "" {
@@ -125,6 +153,60 @@ func (s *ScriptStore) List() []Script {
 		out = append(out, c)
 	}
 	return out
+}
+
+// saveEdits 把覆盖项落盘
+func (s *ScriptStore) saveEdits() error {
+	list := make([]Script, 0, len(s.edits))
+	for _, e := range s.edits {
+		list = append(list, e)
+	}
+	b, _ := json.MarshalIndent(list, "", "  ")
+	return os.WriteFile(s.editPath, b, 0o644)
+}
+
+// SaveOne 修改任意一条（内置的存成覆盖项，自定义的改原条目）
+func (s *ScriptStore) SaveOne(in Script) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if in.ID == "" {
+		return os.ErrInvalid
+	}
+	if strings.HasPrefix(in.ID, "s_builtin_") {
+		s.edits[in.ID] = Script{ID: in.ID, Title: in.Title, Text: in.Text, Category: in.Category, Scene: in.Scene, Builtin: true}
+		return s.saveEdits()
+	}
+	found := false
+	for i := range s.custom {
+		if s.custom[i].ID == in.ID {
+			s.custom[i].Title = in.Title
+			s.custom[i].Text = in.Text
+			s.custom[i].Category = in.Category
+			s.custom[i].Scene = in.Scene
+			found = true
+			break
+		}
+	}
+	if !found {
+		in.Builtin = false
+		s.custom = append(s.custom, in)
+	}
+	b, _ := json.MarshalIndent(s.custom, "", "  ")
+	if err := os.WriteFile(s.path, b, 0o644); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ResetOne 撤掉对内置话术的修改，恢复默认
+func (s *ScriptStore) ResetOne(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.edits[id]; !ok {
+		return nil
+	}
+	delete(s.edits, id)
+	return s.saveEdits()
 }
 
 // Relevant 按关键词重合度给 AI 挑几条参考话术；scene 非空时只挑「通用」和该场景

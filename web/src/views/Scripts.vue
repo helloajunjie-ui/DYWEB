@@ -108,6 +108,37 @@ function removeCustom(s) {
   const custom = local.value.filter((x) => !x.builtin && x.id !== s.id)
   save(custom)
 }
+
+// 编辑（内置话术也能改；内置的会存成覆盖项，可一键还原）
+const editing = ref(null)
+const editForm = ref({ title: '', category: 'keep', scene: '', text: '' })
+function openEdit(s) {
+  editing.value = s
+  editForm.value = { title: s.title, category: s.category, scene: s.scene || '', text: s.text }
+}
+async function saveEdit() {
+  if (!editForm.value.text.trim()) {
+    sayMsg.value = '内容不能为空'
+    return
+  }
+  const res = await post('/api/scripts/item', { id: editing.value.id, ...editForm.value })
+  if (res.ok) {
+    sayMsg.value = '已保存这条修改'
+    editing.value = null
+    emit('reload')
+  } else {
+    sayMsg.value = '保存失败：' + (res.error || '')
+  }
+  setTimeout(() => (sayMsg.value = ''), 3000)
+}
+async function resetEdit(s) {
+  const res = await post('/api/scripts/reset', { id: s.id })
+  if (res.ok) {
+    sayMsg.value = '已还原成默认'
+    emit('reload')
+  }
+  setTimeout(() => (sayMsg.value = ''), 3000)
+}
 </script>
 
 <template>
@@ -158,8 +189,11 @@ function removeCustom(s) {
           <span class="tag" :class="s.builtin ? '' : 'warn'">{{ catName(s.category) }}</span>
           <span class="tag" :class="s.scene ? 'ok' : ''">{{ sceneName(s.scene) }}</span>
           <b class="small">{{ s.title || '我加的话术' }}</b>
+          <span v-if="s.edited" class="tag ok">改过</span>
           <span v-if="!s.builtin" class="small muted">自己加的</span>
           <span style="flex: 1"></span>
+          <button class="btn sm ghost" @click="openEdit(s)">编辑</button>
+          <button v-if="s.edited" class="btn sm ghost" @click="resetEdit(s)">还原</button>
           <button class="btn sm" @click="say(s)">念一遍</button>
           <button v-if="!s.builtin" class="btn sm ghost" @click="removeCustom(s)">删除</button>
         </div>
@@ -190,6 +224,33 @@ function removeCustom(s) {
     <div class="row" style="margin-top: 10px; justify-content: flex-end">
       <button class="btn ghost" @click="showAdd = false">取消</button>
       <button class="btn primary" @click="add">保存这条</button>
+    </div>
+  </div>
+
+  <div v-if="editing" class="card" style="margin-bottom: 14px">
+    <h3>编辑这条话术</h3>
+    <div class="hint" style="margin-bottom: 10px">
+      {{ editing.builtin ? '这是内置话术，改完会覆盖显示；想恢复原文点列表里的「还原」。' : '这是你自己加的话术。' }}
+    </div>
+    <div class="kv">
+      <label>标题</label>
+      <input v-model="editForm.title" placeholder="比如：我家专属开场白" />
+      <label>场景</label>
+      <select v-model="editForm.scene">
+        <option value="">通用（哪个场景都能用）</option>
+        <option value="fun">娱乐</option>
+        <option value="ecom">卖货</option>
+        <option value="auto">无人</option>
+      </select>
+      <label>分类</label>
+      <select v-model="editForm.category">
+        <option v-for="c in cats" :key="c.id" :value="c.id">{{ c.name }}</option>
+      </select>
+    </div>
+    <textarea v-model="editForm.text" rows="5" placeholder="写成你平时说话的样子，越像你自己越好。可用 {user}" style="margin-top: 10px"></textarea>
+    <div class="row" style="margin-top: 10px; justify-content: flex-end">
+      <button class="btn ghost" @click="editing = null">取消</button>
+      <button class="btn primary" @click="saveEdit">保存修改</button>
     </div>
   </div>
 
