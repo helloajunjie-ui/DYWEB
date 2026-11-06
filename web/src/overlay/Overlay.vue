@@ -54,6 +54,8 @@ const sliceThemes = [
 function buildSlices(items) {
   const n = items.length
   const seg = 360 / n
+  // 块越多字越小，避免字压到中心轴
+  const fontSize = n >= 11 ? 16 : n >= 9 ? 18 : n >= 7 ? 21 : 25
   return items.map((text, i) => {
     const t = sliceThemes[i % sliceThemes.length]
     const mid = -90 + seg * (i + 0.5)
@@ -73,13 +75,16 @@ function buildSlices(items) {
       labelRot: flip ? mid + 180 : mid,
       labelX: flip ? -(R_TEXT - 6) : R_TEXT - 6,
       labelAnchor: flip ? 'start' : 'end',
-      lines: splitLabel(text)
+      fontSize,
+      lines: splitLabel(text, n)
     }
   })
 }
 
-function splitLabel(text) {
+function splitLabel(text, n) {
   const s = String(text || '')
+  // 块多的时候一行放不下，截断加省略号，别压到中轴
+  if (n >= 10) return [s.length > 6 ? s.slice(0, 6) + '…' : s]
   if (s.length <= 5) return [s]
   const mid = Math.ceil(s.length / 2)
   return [s.slice(0, mid), s.slice(mid)]
@@ -499,7 +504,7 @@ function enableAudio() {
 
     <!-- 大转盘 -->
     <div v-if="game && game.type === 'wheel'" class="wheel-wrap" :key="'wheel-' + game.started">
-      <div class="wheel-title">{{ game.title }}</div>
+      <div class="wheel-title">大转盘</div>
       <div class="wheel-box">
         <div class="wheel-glow"></div>
         <!-- 外圈金环 + 灯珠 -->
@@ -579,7 +584,7 @@ function enableAudio() {
                 :text-anchor="sl.labelAnchor"
                 class="wheel-label"
                 :class="{ lit: wheelWinIdx === sl.i }"
-                :style="{ fontSize: (sl.lines.length > 1 ? 22 : 25) + 'px', filter: 'drop-shadow(0 0 7px ' + sl.glow + ')' }"
+                :style="{ fontSize: sl.fontSize + 'px' }"
               >{{ line }}</text>
             </g>
           </g>
@@ -743,8 +748,8 @@ function enableAudio() {
   font-size: 38px;
   font-weight: 900;
   letter-spacing: 3px;
-  color: #bff6ff;
-  text-shadow: 0 0 18px rgba(90, 220, 255, 0.9), 0 4px 16px rgba(0, 0, 0, 0.85);
+  color: #ffffff;
+  text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0 4px 18px rgba(0, 0, 0, 0.9);
   margin-bottom: 18px;
 }
 .wheel-box {
@@ -793,13 +798,14 @@ function enableAudio() {
   will-change: transform;
 }
 .wheel-label {
-  fill: #fff6dc;
+  fill: #ffffff;
   font-family: "Microsoft YaHei", sans-serif;
   font-weight: 800;
   paint-order: stroke;
-  stroke: rgba(48, 6, 4, 0.75);
-  stroke-width: 3px;
-  letter-spacing: 2px;
+  stroke: #000000;
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  letter-spacing: 1px;
 }
 .hub-text {
   fill: #9ef0ff;
