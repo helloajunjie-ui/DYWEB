@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { post } from '../ws.js'
 
 const props = defineProps({ data: { type: Object, required: true } })
@@ -11,12 +11,16 @@ const message = ref('')
 const advanced = ref(false)
 const editText = ref('')
 const welcome = ref({ enabled: false, levelOn: false, fansOn: false, valueOn: false, minLevel: 30, minFans: 5, minValue: 100 })
+let welcomeReady = false
+let welcomeTimer = null
+const welcomeTip = ref('')
 
 async function loadWelcome() {
   try {
     const c = await (await fetch('/api/config')).json()
     if (c.welcome) welcome.value = c.welcome
   } catch (e) {}
+  welcomeReady = true
 }
 
 async function saveWelcome() {
@@ -24,11 +28,22 @@ async function saveWelcome() {
     const c = await (await fetch('/api/config')).json()
     c.welcome = welcome.value
     const res = await post('/api/config', c)
-    message.value = res.ok ? '欢迎门槛已保存' : res.msg || '保存失败'
+    welcomeTip.value = res.ok ? '已自动保存' : res.msg || '保存失败'
+    setTimeout(() => (welcomeTip.value = ''), 1500)
   } catch (e) {
-    message.value = '保存失败：' + e.message
+    welcomeTip.value = '保存失败：' + e.message
   }
 }
+
+watch(
+  welcome,
+  () => {
+    if (!welcomeReady) return
+    clearTimeout(welcomeTimer)
+    welcomeTimer = setTimeout(saveWelcome, 700)
+  },
+  { deep: true }
+)
 
 loadWelcome()
 
@@ -243,10 +258,10 @@ const matchLabel = (r) => {
       </div>
     </div>
     <div v-if="welcome.enabled" class="small muted" style="margin-top: 8px">
-      任意一项达标就欢迎；三项都关 = 谁都欢迎。不达标的人进场不播报，调试台会记一条“未达欢迎门槛”。
+      任意一项达标就欢迎；三项都关 = 谁都欢迎。不达标的人进场不播报，调试台会记一条“未达欢迎门槛”。改完自动保存，不用点按钮。
     </div>
-    <div class="row" style="margin-top: 10px">
-      <button class="btn primary" @click="saveWelcome">保存欢迎门槛</button>
+    <div class="row" style="margin-top: 8px">
+      <span v-if="welcomeTip" class="tag ok">{{ welcomeTip }}</span>
     </div>
   </div>
 
