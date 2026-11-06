@@ -152,9 +152,8 @@ function toRule(f) {
 function openNew() {
   form.value = blankForm()
   advanced.value = false
-  editing.value = local.value.length
-  local.value.push(toRule(form.value))
-  editText.value = JSON.stringify(local.value[editing.value], null, 2)
+  editing.value = -1
+  editText.value = JSON.stringify(toRule(form.value), null, 2)
 }
 
 function openEdit(i) {
@@ -170,14 +169,18 @@ function pickScript(e) {
   e.target.value = ''
 }
 
-function apply() {  const rule = toRule(form.value)
-  local.value[editing.value] = rule
+function apply() {
+  const rule = toRule(form.value)
+  if (editing.value >= 0) local.value[editing.value] = rule
+  else local.value.push(rule)
   editing.value = null
 }
 
 function applyJson() {
   try {
-    local.value[editing.value] = JSON.parse(editText.value)
+    const rule = JSON.parse(editText.value)
+    if (editing.value >= 0) local.value[editing.value] = rule
+    else local.value.push(rule)
     editing.value = null
   } catch (e) {
     message.value = 'JSON 有错：' + e.message
@@ -189,18 +192,26 @@ function remove(i) {
   editing.value = null
 }
 
+let rulesTimer = null
 async function save() {
   const res = await post('/api/rules', { rules: local.value })
-  message.value = res.ok ? `已保存 ${res.count} 条规则` : '保存失败：' + (res.msg || '')
-  if (res.ok) {
-    emit('reload')
-    setTimeout(() => (local.value = JSON.parse(JSON.stringify(props.data.rules || []))), 300)
-  }
+  message.value = res.ok ? `已自动保存 ${res.count} 条规则` : '保存失败：' + (res.msg || '')
+  setTimeout(() => {
+    if (message.value.startsWith('已自动保存')) message.value = ''
+  }, 1500)
 }
 
-async function toggle(r) {
+watch(
+  local,
+  () => {
+    clearTimeout(rulesTimer)
+    rulesTimer = setTimeout(save, 800)
+  },
+  { deep: true }
+)
+
+function toggle(r) {
   r.enabled = !r.enabled
-  await save()
 }
 
 const triggerName = (t) => triggers.find((x) => x.id === t)?.name || t
@@ -223,11 +234,10 @@ const matchLabel = (r) => {
 
 <template>
   <div class="row" style="margin-bottom: 12px">
-    <div class="hint">一条规则 = 什么时候触发 + 触发后干什么。点「新建规则」按格子填就行。</div>
+    <div class="hint">一条规则 = 什么时候触发 + 触发后干什么。点「新建规则」按格子填，改完自动保存。</div>
     <span style="flex: 1"></span>
     <span v-if="message" class="tag warn">{{ message }}</span>
     <button class="btn" @click="openNew">新建规则</button>
-    <button class="btn primary" @click="save">保存全部</button>
   </div>
 
   <div class="card" style="margin-bottom: 12px">

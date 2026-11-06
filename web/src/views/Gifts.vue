@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { post } from '../ws.js'
 
 const props = defineProps({ data: { type: Object, required: true } })
@@ -27,15 +27,21 @@ function removeRow(i) {
   local.value.splice(i, 1)
 }
 
+let saveTimer = null
 async function save() {
   const clean = local.value.filter((g) => (g.name || '').trim())
   const res = await post('/api/gifts', { gifts: clean })
-  message.value = res.ok ? `已保存 ${res.count} 个礼物价` : '保存失败：' + (res.msg || res.error || '')
-  if (res.ok) {
-    local.value = clean
-    emit('reload')
-  }
+  message.value = res.ok ? `已自动保存 ${res.count} 个礼物价` : '保存失败：' + (res.msg || res.error || '')
 }
+
+watch(
+  local,
+  () => {
+    clearTimeout(saveTimer)
+    saveTimer = setTimeout(save, 800)
+  },
+  { deep: true }
+)
 
 function parseImport() {
   let added = 0
@@ -55,9 +61,10 @@ function parseImport() {
     added++
   }
   local.value.sort((a, b) => a.value - b.value)
-  message.value = `已解析 ${added} 行，记得点「保存全部」`
+  message.value = `已解析 ${added} 行，已自动保存`
   importing.value = false
   importText.value = ''
+  save()
 }
 </script>
 
@@ -71,7 +78,6 @@ function parseImport() {
     <span v-if="message" class="tag warn">{{ message }}</span>
     <button class="btn" @click="importing = true">批量粘贴导入</button>
     <button class="btn" @click="addRow">新增</button>
-    <button class="btn primary" @click="save">保存全部</button>
   </div>
 
   <div class="row" style="margin-bottom: 10px">

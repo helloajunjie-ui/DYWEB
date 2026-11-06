@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { post } from '../ws.js'
 
 const props = defineProps({ data: { type: Object, required: true } })
@@ -92,18 +92,30 @@ onMounted(() => {
   }
 })
 
+let saveTimer = null
 async function save() {
   try {
     cfg.value.mapping = JSON.parse(mappingText.value)
     cfg.value.typeAliases = JSON.parse(aliasText.value)
   } catch (e) {
-    msg.value = 'JSON 解析失败：' + e.message
+    msg.value = '字段映射 JSON 还没写完整，先不同步：' + e.message
     return
   }
   const res = await post('/api/config', cfg.value)
-  msg.value = res.ok ? res.msg : '保存失败：' + (res.msg || '')
-  if (res.ok) emit('reload')
+  msg.value = res.ok ? '已自动保存' : '保存失败：' + (res.msg || '')
+  setTimeout(() => {
+    if (msg.value === '已自动保存') msg.value = ''
+  }, 1600)
 }
+
+watch(
+  [cfg, mappingText, aliasText],
+  () => {
+    clearTimeout(saveTimer)
+    saveTimer = setTimeout(save, 1200)
+  },
+  { deep: true }
+)
 
 function setTtsMode(m) {
   cfg.value.tts.mode = m
@@ -112,10 +124,9 @@ function setTtsMode(m) {
 
 <template>
   <div class="row" style="margin-bottom: 12px">
-    <div class="hint">先选你要改的那一件事，下面的配置就只显示这一块，不用在一堆格子里找。</div>
+    <div class="hint">先选你要改的那一件事，下面的配置就只显示这一块。改完自动保存，不用点按钮。</div>
     <span style="flex: 1"></span>
     <span v-if="msg" class="tag warn">{{ msg }}</span>
-    <button class="btn primary" @click="save">保存设置</button>
   </div>
 
   <div class="tabs">

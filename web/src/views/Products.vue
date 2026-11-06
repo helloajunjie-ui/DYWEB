@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { post } from '../ws.js'
 
 const props = defineProps({ data: { type: Object, required: true } })
@@ -56,14 +56,20 @@ function remove(i) {
   editing.value = null
 }
 
+let saveTimer = null
 async function save() {
   const res = await post('/api/products', { products: local.value })
-  msg.value = res.ok ? `已保存 ${res.count} 个商品` : '保存失败：' + (res.error || '')
-  if (res.ok) {
-    emit('reload')
-    setTimeout(() => (local.value = JSON.parse(JSON.stringify(props.data.products || []))), 300)
-  }
+  msg.value = res.ok ? `已自动保存 ${res.count} 个商品` : '保存失败：' + (res.error || '')
 }
+
+watch(
+  local,
+  () => {
+    clearTimeout(saveTimer)
+    saveTimer = setTimeout(save, 800)
+  },
+  { deep: true }
+)
 
 async function makePitch(p) {
   busy.value = true
@@ -85,7 +91,6 @@ async function sayPitch() {
     <span style="flex: 1"></span>
     <span v-if="msg" class="tag warn">{{ msg }}</span>
     <button class="btn" @click="add">新增商品</button>
-    <button class="btn primary" @click="save">保存全部</button>
   </div>
 
   <div class="card" style="padding: 0">
