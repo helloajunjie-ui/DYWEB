@@ -1,0 +1,15 @@
+# 运行期数据（含 API Key、日志），不入库
+/data/
+
+# 前端依赖与构建产物
+/web/node_modules/
+/server/webdist/
+
+# 可执行文件
+dyweb.exe
+*.exe
+
+# 日志与临时文件
+*.log
+*.err.txt
+tmp/
