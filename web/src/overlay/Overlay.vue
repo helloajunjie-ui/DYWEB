@@ -37,73 +37,6 @@ const wheelDur = ref(4200)
 const wheelSpin = ref(false)
 const wheelWinner = ref('')
 const wheelWinIdx = ref(-1)
-const wheelSlices = ref([])
-
-// 彩色玻璃：宝石色玻璃片 + 深色铅条分隔，不发光
-const sliceThemes = [
-  { a: '#235ca6', b: '#3a7bd5', glow: '#0b1119' }, // 蓝宝石
-  { a: '#177a5e', b: '#22a074', glow: '#0b1119' }, // 祖母绿
-  { a: '#a3264a', b: '#c73460', glow: '#0b1119' }, // 红宝石
-  { a: '#9a6414', b: '#bd8220', glow: '#0b1119' }, // 琥珀
-  { a: '#6a3899', b: '#8850bd', glow: '#0b1119' }, // 紫水晶
-  { a: '#237a9e', b: '#2f9dc4', glow: '#0b1119' }, // 青金石
-  { a: '#8a3661', b: '#a84577', glow: '#0b1119' }, // 石榴石
-  { a: '#5c7a28', b: '#78992f', glow: '#0b1119' } // 橄榄石
-]
-
-function buildSlices(items) {
-  const n = items.length
-  const seg = 360 / n
-  // 块越多字越小，避免字压到中心轴
-  const fontSize = n >= 11 ? 16 : n >= 9 ? 18 : n >= 7 ? 21 : 25
-  return items.map((text, i) => {
-    const t = sliceThemes[i % sliceThemes.length]
-    const mid = -90 + seg * (i + 0.5)
-    // 落在下半圈的扇区把文字翻 180°，避免“倒着念”
-    const m = ((mid % 360) + 360) % 360
-    const flip = m > 90 && m < 270
-    return {
-      text,
-      i,
-      a0: -90 + seg * i + 0.7,
-      a1: -90 + seg * (i + 1) - 0.7,
-      mid,
-      seg,
-      from: t.a,
-      to: t.b,
-      glow: t.glow,
-      labelRot: flip ? mid + 180 : mid,
-      labelX: flip ? -(R_TEXT - 6) : R_TEXT - 6,
-      labelAnchor: flip ? 'start' : 'end',
-      fontSize,
-      lines: splitLabel(text, n)
-    }
-  })
-}
-
-function splitLabel(text, n) {
-  const s = String(text || '')
-  // 块多的时候一行放不下，截断加省略号，别压到中轴
-  if (n >= 10) return [s.length > 6 ? s.slice(0, 6) + '…' : s]
-  if (s.length <= 5) return [s]
-  const mid = Math.ceil(s.length / 2)
-  return [s.slice(0, mid), s.slice(mid)]
-}
-
-const R_OUT = 252
-const R_TEXT = 206
-
-function pt(r, deg) {
-  const a = (deg * Math.PI) / 180
-  return [260 + r * Math.cos(a), 260 + r * Math.sin(a)]
-}
-
-function slicePath(sl) {
-  const [x0, y0] = pt(R_OUT, sl.a0)
-  const [x1, y1] = pt(R_OUT, sl.a1)
-  return `M 260 260 L ${x0.toFixed(2)} ${y0.toFixed(2)} A ${R_OUT} ${R_OUT} 0 0 1 ${x1.toFixed(2)} ${y1.toFixed(2)} Z`
-}
-
 function startWheel(items, ms) {
   wheelItems.value = items.slice()
   nextTick(drawWheel)
@@ -991,40 +924,6 @@ function enableAudio() {
   align-items: center;
   justify-content: center;
 }
-.wheel-glow {
-  display: none;
-  position: absolute;
-  inset: -14px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 190, 80, 0.30) 0%, rgba(190, 40, 20, 0.18) 52%, rgba(0, 0, 0, 0) 72%);
-  filter: none;
-  animation: wheelGlow 2.2s ease-in-out infinite;
-}
-.wheel-rim {
-  display: none;
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  pointer-events: none;
-}
-.bulb {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 9px;
-  height: 9px;
-  margin: -4.5px 0 0 -4.5px;
-  border-radius: 50%;
-  background: #bff6ff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
-  animation: twinkle 1.05s ease-in-out infinite alternate;
-}
-.wheel-svg {
-  width: 520px;
-  height: 520px;
-  display: block;
-  filter: none;
-}
 .wheel-canvas {
   width: 520px;
   height: 520px;
@@ -1055,23 +954,6 @@ function enableAudio() {
   transition-property: transform;
   will-change: transform;
 }
-.wheel-label {
-  fill: #ffffff;
-  font-family: "Microsoft YaHei", sans-serif;
-  font-weight: 800;
-  paint-order: stroke;
-  stroke: #000000;
-  stroke-width: 4px;
-  stroke-linejoin: round;
-  letter-spacing: 1px;
-}
-.hub-text {
-  fill: #9ef0ff;
-  font-family: "Microsoft YaHei", sans-serif;
-  font-size: 20px;
-  font-weight: 900;
-  letter-spacing: 3px;
-}
 .wheel-pointer {
   position: absolute;
   left: 50%;
@@ -1089,41 +971,6 @@ function enableAudio() {
 @keyframes pointerPulse {
   0%, 100% { transform: translateX(-50%) translateY(0); }
   50% { transform: translateX(-50%) translateY(-4px); }
-}
-.slice {
-  transition: opacity 0.35s ease;
-}
-.slice.dim {
-  opacity: 0.5;
-}
-.wheel-scan {
-  display: none;
-  position: absolute;
-  inset: 6px;
-  border-radius: 50%;
-  pointer-events: none;
-  background: repeating-linear-gradient(180deg, rgba(120, 220, 255, 0.14) 0px, rgba(120, 220, 255, 0.14) 1px, transparent 1px, transparent 4px);
-  mix-blend-mode: screen;
-  opacity: 0.3;
-  animation: scanMove 2.4s linear infinite;
-}
-@keyframes scanMove {
-  from { background-position: 0 0; }
-  to { background-position: 0 40px; }
-}
-.win-flash {
-  fill: rgba(255, 255, 255, 0.03);
-  stroke-width: 4;
-  pointer-events: none;
-  animation: winFlash 0.55s ease-in-out infinite alternate;
-}
-@keyframes winFlash {
-  from { opacity: 0.25; }
-  to { opacity: 1; }
-}
-.wheel-label.lit {
-  fill: #ffffff;
-  font-weight: 900;
 }
 /* ---------- 名字抽奖 ---------- */
 .names-wrap {
@@ -1228,10 +1075,6 @@ function enableAudio() {
 @keyframes twinkle {
   from { opacity: 0.3; }
   to { opacity: 1; }
-}
-@keyframes wheelGlow {
-  0%, 100% { opacity: 0.7; }
-  50% { opacity: 1; }
 }
 .wheel-result {
   margin-top: 12px;
